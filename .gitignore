@@ -127,3 +127,21 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+#don't save data
+data/expression/*
+data/dnase/*
+data/atac/*
+data/h3k27ac/*
+data/h3k4me1/*
+data/h3k36me3/*
+data/h3k27me3/*
+data/h3k4me1/*
+data/h3k4me3/*
+data/h3k9me3/*
+data/model_ref/*
+data/h2a/*   
+data/h3k9ac/*
+data/h4k20me1/*
+data/h3k4me2/*
+data/h3k79me2/*
