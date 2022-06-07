@@ -132,6 +132,7 @@ dmypy.json
 pbs
 pbs/
 pbs/*
+*.pbs.*
 
 #don't save data
 data/expression/*
