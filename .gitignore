@@ -132,6 +132,8 @@ dmypy.json
 pbs
 pbs/
 pbs/*
+pbs_*
+#HPC PBS returns
 *.pbs.*
 
 #don't save data
