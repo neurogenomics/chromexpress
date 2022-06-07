@@ -1,0 +1,26 @@
+Obtaining file:///rds/general/project/neurogenomics-lab/live/Projects/epi_to_express
+Installing collected packages: epi-to-express
+  Attempting uninstall: epi-to-express
+    Found existing installation: epi-to-express 0.9.1
+    Uninstalling epi-to-express-0.9.1:
+      Successfully uninstalled epi-to-express-0.9.1
+  Running setup.py develop for epi-to-express
+Successfully installed epi-to-express-0.9.1
+---------------------------------
+GM12878
+h3k36me3
+---------------------------------
+Num GPUs Available:  0
+Epoch 1/100
+121/121 - 304s - loss: 1.2420 - mse: 1.2420 - val_loss: 0.5037 - val_mse: 0.5037 - lr: 0.0010 - 304s/epoch - 3s/step
+Epoch 2/100
+
+============================================
+
+        Job resource usage summary 
+
+                 Memory (GB)    NCPUs
+ Requested  :        24             4
+ Used       :        10 (peak)  18.52 (ave)
+
+============================================

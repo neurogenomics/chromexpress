@@ -128,6 +128,11 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+#don't save HPC things
+pbs
+pbs/
+pbs/*
+
 #don't save data
 data/expression/*
 data/dnase/*
@@ -145,3 +150,7 @@ data/h3k9ac/*
 data/h4k20me1/*
 data/h3k4me2/*
 data/h3k79me2/*
+
+#model results
+model_results/
+model_results/*

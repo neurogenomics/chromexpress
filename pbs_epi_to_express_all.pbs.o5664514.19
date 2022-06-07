@@ -1,0 +1,51 @@
+Obtaining file:///rds/general/project/neurogenomics-lab/live/Projects/epi_to_express
+Installing collected packages: epi-to-express
+  Attempting uninstall: epi-to-express
+    Found existing installation: epi-to-express 0.9.1
+    Uninstalling epi-to-express-0.9.1:
+      Successfully uninstalled epi-to-express-0.9.1
+  Running setup.py develop for epi-to-express
+Successfully installed epi-to-express-0.9.1
+---------------------------------
+K562
+h3k27ac
+---------------------------------
+Num GPUs Available:  1
+Epoch 1/100
+121/121 - 207s - loss: 1.4076 - mse: 1.4076 - val_loss: 0.0921 - val_mse: 0.0921 - lr: 0.0010 - 207s/epoch - 2s/step
+Epoch 2/100
+121/121 - 185s - loss: 1.3126 - mse: 1.3126 - val_loss: 0.0894 - val_mse: 0.0894 - lr: 0.0010 - 185s/epoch - 2s/step
+Epoch 3/100
+121/121 - 184s - loss: 1.2965 - mse: 1.2965 - val_loss: 0.0931 - val_mse: 0.0931 - lr: 0.0010 - 184s/epoch - 2s/step
+Epoch 4/100
+121/121 - 184s - loss: 1.2878 - mse: 1.2878 - val_loss: 0.0914 - val_mse: 0.0914 - lr: 0.0010 - 184s/epoch - 2s/step
+Epoch 5/100
+121/121 - 184s - loss: 1.2771 - mse: 1.2771 - val_loss: 0.0955 - val_mse: 0.0955 - lr: 0.0010 - 184s/epoch - 2s/step
+Epoch 6/100
+121/121 - 184s - loss: 1.2715 - mse: 1.2715 - val_loss: 0.0935 - val_mse: 0.0935 - lr: 2.0000e-04 - 184s/epoch - 2s/step
+Epoch 7/100
+121/121 - 185s - loss: 1.2704 - mse: 1.2704 - val_loss: 0.0925 - val_mse: 0.0925 - lr: 2.0000e-04 - 185s/epoch - 2s/step
+Epoch 8/100
+121/121 - 184s - loss: 1.2683 - mse: 1.2683 - val_loss: 0.0917 - val_mse: 0.0917 - lr: 2.0000e-04 - 184s/epoch - 2s/step
+Epoch 9/100
+121/121 - 184s - loss: 1.2662 - mse: 1.2662 - val_loss: 0.0920 - val_mse: 0.0920 - lr: 4.0000e-05 - 184s/epoch - 2s/step
+Epoch 10/100
+121/121 - 184s - loss: 1.2667 - mse: 1.2667 - val_loss: 0.0925 - val_mse: 0.0925 - lr: 4.0000e-05 - 184s/epoch - 2s/step
+Epoch 11/100
+121/121 - 184s - loss: 1.2664 - mse: 1.2664 - val_loss: 0.0925 - val_mse: 0.0925 - lr: 4.0000e-05 - 184s/epoch - 2s/step
+Epoch 12/100
+121/121 - 184s - loss: 1.2666 - mse: 1.2666 - val_loss: 0.0925 - val_mse: 0.0925 - lr: 8.0000e-06 - 184s/epoch - 2s/step
+Epoch 13/100
+121/121 - 185s - loss: 1.2668 - mse: 1.2668 - val_loss: 0.0925 - val_mse: 0.0925 - lr: 8.0000e-06 - 185s/epoch - 2s/step
+Epoch 14/100
+121/121 - 185s - loss: 1.2663 - mse: 1.2663 - val_loss: 0.0919 - val_mse: 0.0919 - lr: 8.0000e-06 - 185s/epoch - 2s/step
+
+============================================
+
+        Job resource usage summary 
+
+                 Memory (GB)    NCPUs
+ Requested  :        24             4
+ Used       :         4 (peak)   1.03 (ave)
+
+============================================

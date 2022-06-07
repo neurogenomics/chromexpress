@@ -103,25 +103,11 @@ def download_bigwigs(exp_type: str) -> None:
 def print_names(file_list: List[str]) -> str:
     return '\n'.join(['Saved file at: {}'.format(file) for file in file_list])
 
-
-def download_blacklist_regions() -> None:
-    """
-    Downloads ENCODE's blacklist regions in hg19
-    """
-    folder_name = DATA_PATH / 'model_ref'
-    blck_list = ("encode_blacklist.bigBed",
-            "https://www.encodeproject.org/files/ENCFF000KJP/@@download/ENCFF000KJP.bigBed")
-    download_file(blck_list,folder_name,extension=False)
-
 if __name__ == '__main__':
     print(datetime.now())
     print("There are {} CPUs on this machine ".format(cpu_count()))
     for exp_type in ['model_ref','expression']+ASSAYS:
         print("Downloading {exp_type}".format(exp_type=exp_type))
         download_bigwigs(exp_type)
-    print("download training data completed")
-    print(datetime.now())
-    #download encode blacklist regions
-    download_blacklist_regions()
     print("All downloads complete")
     print(datetime.now())

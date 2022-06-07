@@ -27,7 +27,7 @@ CELLS = {'E003' : 'H1 Cell Line',
          'E122' : 'HUVEC',
          'E123' : 'K562',
          'E127' : 'NHEK',
-         'E128' : 'NHLF'
+         #'E128' : 'NHLF' #all values are nan in exp mat so don't use
          }
 
 SAMPLES=list(CELLS.values())
@@ -47,9 +47,6 @@ CHROMOSOMES =np.array(['chr1', 'chr2', 'chr3', 'chr4', 'chr5', 'chr6', 'chr7', '
 ASSAYS = ['h3k36me3','h3k4me1','h3k4me3','h3k9me3','h3k27me3','h3k27ac','dnase',
           'h3k9ac','h3k4me2','h2a','h3k79me2','h4k20me1']
 
-# load blacklist regions
-BLACKLIST_PATH = MODEL_REFERENCE_PATH / "encode_blacklist.bigBed"
-
 # Extract all possible data file paths
 H3K36ME3_DATA = {path.stem: path for path in DATA_PATH.glob("h3k36me3/*")}
 H3K4ME1_DATA = {path.stem: path for path in DATA_PATH.glob("h3k4me1/*")}
@@ -59,14 +56,14 @@ H3K27ME3_DATA = {path.stem: path for path in DATA_PATH.glob("h3k27me3/*")}
 H3K27AC_DATA = {path.stem: path for path in DATA_PATH.glob("h3k27ac/*")}
 DNASE_DATA = {path.stem: path for path in DATA_PATH.glob("dnase/*")}
 H3K9AC_DATA = {path.stem: path for path in DATA_PATH.glob("h3k9ac/*")}
-H3K4ME2_DATA = {path.stem: path for path in DATA_PATH.glob("h3k9me2/*")}
-H2A_DATA = {path.stem: path for path in DATA_PATH.glob("h2A/*")}
+H3K4ME2_DATA = {path.stem: path for path in DATA_PATH.glob("h3k4me2/*")}
+H2A_DATA = {path.stem: path for path in DATA_PATH.glob("h2a/*")}
 H3K79ME2_DATA = {path.stem: path for path in DATA_PATH.glob("h3k79me2/*")}
-H3K20ME1_DATA = {path.stem: path for path in DATA_PATH.glob("h3k20m1/*")}
+H4K20ME1_DATA = {path.stem: path for path in DATA_PATH.glob("h4k20me1/*")}
 
 
-ALLOWED_FEATURES = ["expression", "dnase","h3k27ac", "h3k4me1","h3k9ac","h3k9me2",
-                    "h3k4me3","h3k9me3","h3k27me3","h3k36me3","h2A","h3k79me2","h3k20m1"]
+ALLOWED_FEATURES = ["expression", "dnase","h3k27ac", "h3k4me1","h3k9ac","h3k4me2",
+                    "h3k4me3","h3k9me3","h3k27me3","h3k36me3","h2a","h3k79me2","h4k20me1"]
 ALLOWED_CELLS = SAMPLES
 CHROMOSOME_DATA = {
     chromosome: length for chromosome, length in zip(CHROMOSOMES, CHROM_LEN)

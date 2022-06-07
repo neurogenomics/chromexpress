@@ -1,6 +1,26 @@
 # epi_to_express
-Which epigenetic factors are the best predictors of gene expression? An analysis using ENCODE data.
+Which epigenetic factors are the best predictors of gene expression? An analysis using ROADMAP data.
 
+## Background
+This question was studied quite some time ago: [
+Histone modification levels are predictive for gene expression](https://www.pnas.org/doi/10.1073/pnas.0909344107#:~:text=Using%20the%20trained%20model%20parameters,0.82%2C%20respectively)
+However:
+* Only considered 2 T-cells
+* Used a linear model
+* Only considered promoter histone mark information (i.e. very short range)
+
+Our work here expands on this by considering more cell types to see if there are universal histone marks
+which are predictive, considers far wider sequences of histone mark information which should encourage
+enhancer and other long range marks and finally, uses neural networks which is more in line with current
+approaches so would be more applicable.
+
+Note on RPKM: RPKM (reads per kilobase of transcript per million reads mapped) is a gene expression unit 
+that measures the expression levels (mRNA abundance) of genes or transcripts. RPKM is a gene length 
+normalized expression unit that is used for identifying the differentially expressed genes by comparing 
+the RPKM values between different experimental conditions. Generally, the higher the RPKM of a gene, 
+the higher the expression of that gene. 
+
+Here we normalised the RPKM per cell to have mean 0 std 1.
 
 ## Aim
 The aim of the project is to try and infer which histone mark or chromatin accessibility assay
@@ -8,11 +28,15 @@ does the best job of predicting expression profiles in the same cell type.
 
 * The same neural network architecture will be applied
 * A variation of the CNN model from [Evaluating deep learning for predicting epigenomic profiles](https://www.biorxiv.org/content/10.1101/2022.04.29.490059v1.full) 
-will be used, trained for 100 epochs using ADAM(default params) and early stopping with patience of 10 epochs.
-The initial learning rate was set to 0.001 and decayed by a factor of 0.2 when the loss function did not 
-improve after a patience of 3 epochs. Batch size 64.
+will be used: 
+    * trained for 100 epochs 
+    * ADAM(default params)
+    * Early stopping with patience of 12 epochs.
+    * The initial learning rate was set to 0.001 
+    * Learning rate decay by a factor of 0.2 with a patience of 3 epochs. 
+    * Batch size 128.
 * The model will predict the continuous RPKM expression values per cell.
-* Assay data 1Mbp around the gene of interest will be considered.
+* Assay data 100k bp around the gene of interest will be considered.
 * Mulitiple cells will be tested and scored aggregated
 * Mulitiple histone marks/chro access assays will be tested and benchmarked.
 * Whole chromosomes of genes will be held out for the blind test.
@@ -52,8 +76,6 @@ These were used to predict expression. RPKM expression matrix for **protein codi
 
 All data was aligned to hg19.
 
-ENCODE blacklist regions were also excluded from training.
-
 ## Steps
 
 Use the conda environments (yaml files in ./environments) for the steps.
@@ -67,6 +89,12 @@ python bin/download_data_parallel.py
 ```
 
 with the epi_to_express conda env.
+
+**Also** run the below command with the same env to get the reference genome data for grch37:
+
+```
+pyensembl install --release 75 --species homo_sapiens
+```
 
 ### 2. Convert all bigwigs to 25bp resolution files
 
