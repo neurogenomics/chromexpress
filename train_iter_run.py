@@ -9,24 +9,24 @@ import numpy as np
 import pandas as pd
 import math
 import argparse
+import itertools
 
 #import constants
 from epi_to_express.constants import (
     CHROM_LEN, 
     CHROMOSOMES, 
     SAMPLES,
+    SAMPLE_IDS,
     CHROMOSOME_DATA,
     SRC_PATH,
     ASSAYS,
-    DATA_PATH)
+    PROJECT_PATH)
 
 #model imports
 import tensorflow as tf
 #data loading imports
-from epi_to_express.utils import(
-    train_valid_split,
-    DataGenerator)
-
+from epi_to_express.utils import Roadmap3D_tf
+from epi_to_express.model import conv_profile_task_base
 
 #pass inputs
 # argv
@@ -43,7 +43,7 @@ CELL=args.CELL
 #leading and trailing whitespace
 CELL=CELL.strip()
 #assert it's a valid choice
-assert CELL in SAMPLES, f"{CELL} not valid. Must choose valid cell: {SAMPLES}"
+assert CELL in SAMPLE_IDS, f"{CELL} not valid. Must choose valid cell: {SAMPLE_IDS}"
 
 MARK=args.MARK.lower()
 MARK=MARK.strip()
@@ -59,7 +59,7 @@ print("---------------------------------")
 np.random.seed(101)
 tf.random.set_seed(101)
 random.seed(101)
-
+    
 SAVE_PATH = pathlib.Path("./model_results")
 SAVE_PATH.mkdir(parents=True, exist_ok=True)
 
@@ -71,99 +71,106 @@ MOD_SAVE_PATH.mkdir(parents=True, exist_ok=True)
 #what will be used to predict expression
 features = [MARK]
 #what cell will we predict in
-cell = [CELL]
+cell = CELL
 #resolution for training assay
-pred_resolution = 25
+pred_resolution = 100# choice of 100, 500, 2000
 # 1 Mb of the assay will be considered for the prediction of gene expression
-window_size = 100_000
+window_size = 20_000
+#number of k-fold cross validation
+k_fold = 4
+#seed
+seed = 123
+#regression problem
+y_type = 'log2RPKM'
 
 # Model specifics
-batch_size = 128
+batch_size = 64
 n_epochs = 100
 init_learning_rate = 0.001
 lr_decay_factor = 0.2
 lr_patience = 3
 es_patience = 12
 
-# Dataset parameters
-valid_frac = 0.2
-# Generic split func - Train test split over chromosomes
-split = "CHROM"
-# Exclude chromosomes, save for test set (when not predicting across cell types)
-# hold out chromosomes 3,7,20
-blind_test = [2,6,19]#positions not chroms
-train_len = np.delete(CHROM_LEN, blind_test)
-train_chrom = np.delete(CHROMOSOMES, blind_test)
-test_len = CHROM_LEN[np.ix_(blind_test)]
-test_chrom = CHROMOSOMES[np.ix_(blind_test)]
-train_valid_samples = np.asarray(cell)
+# 2. --- Dataset parameters -------------------------------
+train_dir = PROJECT_PATH/'chromoformer'/'preprocessing'
+train_meta = train_dir / 'train.csv'
+meta = pd.read_csv(train_meta) \
+    .sample(frac=1, random_state=seed) \
+    .reset_index(drop=True) # load and shuffle.
 
-#Split the data into training and validation set - split by mix chrom and sample
-#set seed so get the same split
-(s_train_index, s_valid_index, c_train_index, c_valid_index, s_train_dist,
- s_valid_dist, c_train_dist, c_valid_dist) = train_valid_split(train_chrom,
-                                                            train_len,
-                                                            train_valid_samples,
-                                                            valid_frac,
-                                                            split)
-# Training
-train_cells = train_valid_samples[np.ix_(s_train_index)]
-train_chromosomes = CHROMOSOMES[np.ix_(c_train_index)]
-train_cell_probs = s_train_dist # equal probabilities
-train_chromosome_probs = c_train_dist #weighted by chrom size
-# Validation
-#using wandb.config. converted their class (v 0.12.9, issue raised) so not storing for now
-valid_cells = train_valid_samples[np.ix_(s_valid_index)]
-valid_chromosomes = CHROMOSOMES[np.ix_(c_valid_index)]
-valid_cell_probs = s_valid_dist
-valid_chromosome_probs = c_valid_dist
+#filter metadat to cell type of interest
+meta = meta[meta.eid == CELL]
 
-# 2. --- Data loaders ---------------------------------------------------
-training_generator = DataGenerator(cell=train_cells, 
-                                   chromosomes=train_chromosomes,
-                                   features=features, 
-                                   window_size=window_size,
-                                   pred_res=pred_resolution, 
-                                   batch_size=batch_size, shuffle=True,
-                                   test_subset=False)
-validation_generator = DataGenerator(cell=valid_cells, 
-                                   chromosomes=valid_chromosomes,
-                                   features=features, 
-                                   window_size=window_size,
-                                   pred_res=pred_resolution,
-                                   batch_size=batch_size, shuffle=True,
-                                   test_subset=False)
+# Split genes into two sets (train/val).
+genes = set(meta.gene_id.unique())
+n_genes = len(genes)
+print('Target genes:', len(genes))
 
-# 3. --- Training ---------------------------------------------------
-print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
+#get data for folds separated
+qs = [
+    meta[meta.split == 1].gene_id.tolist(),
+    meta[meta.split == 2].gene_id.tolist(),
+    meta[meta.split == 3].gene_id.tolist(),
+    meta[meta.split == 4].gene_id.tolist(),
+]
 
-from epi_to_express.model import conv_profile_task_base
+# 3. --- Train models -------------------------------
+# loop through each fold
+for ind,fold in enumerate([x+1 for x in range(k_fold)]):
+    print(f"K-fold Cross-Validation - blind test: {ind}")
+    #get fold specific data ----
+    train_genes = qs[(fold + 0) % 4] + qs[(fold + 1) % 4] + qs[(fold + 2) % 4]
+    val_genes = qs[(fold + 3) % 4]
 
-# import conv model
-model = conv_profile_task_base(input_shape=[window_size//pred_resolution,len(features)],
-                               output_shape=[1,1])
+    #split val_genes in two to get validation and test set
+    # train/val split by chrom so do the same for val test
+    val_test_genes = val_genes
+    val_test_chrom = list(set(meta[meta.gene_id.isin(val_test_genes)]['chrom']))
+    val_chrom = val_test_chrom[0:len(val_test_chrom)//2]
+    test_chrom = val_test_chrom[len(val_test_chrom)//2:len(val_test_chrom)]
+    val_genes = meta[meta.gene_id.isin(val_test_genes) & meta.chrom.isin(val_chrom)]['gene_id'].tolist()
+    test_genes = meta[meta.gene_id.isin(val_test_genes) & meta.chrom.isin(test_chrom)]['gene_id'].tolist()
+    #----
+    #data loaders ----
+    training_generator = Roadmap3D_tf(cell, train_genes, batch_size=batch_size,
+                                      w_prom=window_size, w_max=window_size,
+                                      marks = features,y_type=y_type,
+                                      pred_res = pred_resolution,
+                                      return_pcres=False)
+    validation_generator = Roadmap3D_tf(cell, val_genes, batch_size=batch_size,
+                                        w_prom=window_size, w_max=window_size,
+                                        marks = features,y_type=y_type,
+                                        pred_res = pred_resolution,
+                                        return_pcres=False)
+    #----
+    #train ----
+    print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 
-#learning rate schedule
-lr_schedule = tf.keras.callbacks.ReduceLROnPlateau(monitor="val_loss", 
-                                                 factor=lr_decay_factor, 
-                                                 patience=lr_patience)
-#early stopping
-es = tf.keras.callbacks.EarlyStopping(monitor='val_loss',patience=es_patience,
-                                      #save best weights
-                                      restore_best_weights=True)
+    # import conv model
+    model = conv_profile_task_base(output_shape=[1,1],window_size=window_size,
+                                   pred_res=pred_resolution)
 
-model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=init_learning_rate),
-              loss=tf.keras.losses.mean_squared_error,
-              metrics='mse')
+    #learning rate schedule
+    lr_schedule = tf.keras.callbacks.ReduceLROnPlateau(monitor="val_loss", 
+                                                     factor=lr_decay_factor, 
+                                                     patience=lr_patience)
+    #early stopping
+    es = tf.keras.callbacks.EarlyStopping(monitor='val_loss',patience=es_patience,
+                                          #save best weights
+                                          restore_best_weights=True)
 
-# Train model on dataset
-model.fit(training_generator,
-          validation_data=validation_generator,
-          epochs=n_epochs,
-          verbose=2,
-          use_multiprocessing=False,#started getting errors when set to True...
-          callbacks=[es,lr_schedule]
-         )
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=init_learning_rate),
+                  loss=tf.keras.losses.mean_squared_error,
+                  metrics='mse')
 
-model.save(f"{MOD_SAVE_PATH}/mod_{'-'.join(cell)}_{'-'.join(features)}")
+    # Train model on dataset
+    model.fit(training_generator,
+              validation_data=validation_generator,
+              epochs=n_epochs,
+              verbose=2,
+              use_multiprocessing=False,#started getting errors when set to True...
+              callbacks=[es,lr_schedule]
+             )
+
+    model.save(f"{MOD_SAVE_PATH}/mod_{'-'.join(cell)}_{'-'.join(features)}_kfold{ind}")
 

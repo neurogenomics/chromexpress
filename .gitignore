@@ -153,7 +153,8 @@ data/h3k9ac/*
 data/h4k20me1/*
 data/h3k4me2/*
 data/h3k79me2/*
-
+chromofomer/preprocessing/data/*
+chromofomer/preprocessing/data
 #model results
 model_results/
 model_results/*
