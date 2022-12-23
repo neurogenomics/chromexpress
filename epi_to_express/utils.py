@@ -25,6 +25,69 @@ from epi_to_express.constants import (
     CHROM_LEN
 )
 
+#Pearson R Implementation ----------------------------------------------------
+@tf.function  
+def pearsonR_old(y_true, y_pred,reduce_axis=(0,1),avg=True):
+    _product_sum = tf.reduce_sum(y_true * y_pred, axis=reduce_axis)
+    _true_sum = tf.reduce_sum(y_true, axis=reduce_axis)
+    _pred_sum = tf.reduce_sum(y_pred, axis=reduce_axis)
+    _count = tf.reduce_sum(tf.ones_like(y_true), axis=reduce_axis)
+    
+    _true_squared_sum = tf.reduce_sum(tf.math.square(y_true), 
+                                      axis=reduce_axis)
+    _pred_squared_sum = tf.reduce_sum(tf.math.square(y_pred), 
+                                      axis=reduce_axis)
+    
+    true_mean = _true_sum / _count
+    pred_mean = _pred_sum / _count
+    
+    covariance = (_product_sum
+                  - true_mean * _pred_sum
+                  - pred_mean * _true_sum
+                  + _count * true_mean * pred_mean)
+    
+    true_var = _true_squared_sum - _count * tf.math.square(true_mean)
+    pred_var = _pred_squared_sum - _count * tf.math.square(pred_mean)
+    tp_var = tf.math.sqrt(true_var) * tf.math.sqrt(pred_var)
+
+    correlation = covariance / tp_var
+    #now just get mean of all channels
+    if avg:
+        #remove nans caused by 0's in a true or pred channel
+        return tf.reduce_mean(tf.boolean_mask(correlation, tf.math.is_finite(correlation)))
+    return correlation
+
+class pearsonR(tf.keras.metrics.Metric): 
+    def __init__(self, name="correlation", **kwargs): 
+        super(pearsonR, self).__init__(name=name, **kwargs)
+        self.correlation = self.add_weight(name="correlation", initializer="zeros")
+        self.n = self.add_weight(name="n", initializer="zeros")
+        self.x = self.add_weight(name="x", initializer="zeros")
+        self.x_squared = self.add_weight(name="x_squared", initializer="zeros")
+        self.y = self.add_weight(name="y", initializer="zeros")
+        self.y_squared = self.add_weight(name="y_squared", initializer="zeros")
+        self.xy = self.add_weight(name="xy", initializer="zeros")
+        
+    def update_state(self, y_true, y_pred, sample_weight=None): 
+        self.n.assign_add(tf.reduce_sum(tf.cast((y_pred == y_true), "float32")))
+        self.n.assign_add(tf.reduce_sum(tf.cast((y_pred != y_true), "float32")))
+        self.xy.assign_add(tf.reduce_sum(tf.multiply(y_pred, y_true)))
+        self.x.assign_add(tf.reduce_sum(y_pred))
+        self.y.assign_add(tf.reduce_sum(y_true))
+        self.x_squared.assign_add(tf.reduce_sum(tf.math.square(y_pred)))
+        self.y_squared.assign_add(tf.reduce_sum(tf.math.square(y_true)))
+        
+    def result(self): 
+        return (self.n*self.xy - self.x*self.y)/tf.math.sqrt((self.n*self.x_squared - tf.math.square(self.x))*(self.n*self.y_squared - tf.math.square(self.y)))
+        
+    def reset_state(self): 
+        self.n.assign(0.0)
+        self.x.assign(0.0)
+        self.x_squared.assign(0.0)
+        self.y.assign(0.0)
+        self.y_squared.assign(0.0)
+        self.xy.assign(0.0)
+        self.correlation.assign(0.0)
 
 def train_valid_split(chromosomes, chrom_len, samples, valid_frac, split):
     """

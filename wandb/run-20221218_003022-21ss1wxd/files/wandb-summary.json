@@ -1,0 +1,1 @@
+{"epoch": 15, "_timestamp": 1671336812.0186594, "loss": 110364.5, "mse": 110364.5, "correlation": 0.5773102045059204, "val_loss": 108727.1484375, "val_mse": 108727.1484375, "val_correlation": 0.6199544072151184, "lr": 8.000000889296643e-06, "_runtime": 13389.256935358047, "_step": 15, "best_val_loss": 106127.75, "best_epoch": 3, "_wandb": {"runtime": 65360}}

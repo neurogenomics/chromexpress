@@ -10,6 +10,12 @@ import pandas as pd
 import math
 import argparse
 import itertools
+import os.path
+
+#track models
+import wandb
+#from omegaconf import OmegaConf
+from wandb.keras import WandbCallback
 
 #import constants
 from epi_to_express.constants import (
@@ -27,7 +33,8 @@ import tensorflow as tf
 #data loading imports
 from epi_to_express.utils import Roadmap3D_tf
 from epi_to_express.model import conv_profile_task_base
-
+from epi_to_express.model import covnet
+from epi_to_express.utils import pearsonR
 #pass inputs
 # argv
 def get_args():
@@ -75,7 +82,7 @@ cell = CELL
 #resolution for training assay
 pred_resolution = 100# choice of 100, 500, 2000
 # 1 Mb of the assay will be considered for the prediction of gene expression
-window_size = 20_000
+window_size = 6_000
 #number of k-fold cross validation
 k_fold = 4
 #seed
@@ -83,13 +90,15 @@ seed = 123
 #regression problem
 y_type = 'log2RPKM'
 
-# Model specifics
+# Model specifics - similar to https://www.nature.com/articles/s42256-022-00570-9
 batch_size = 64
 n_epochs = 100
 init_learning_rate = 0.001
 lr_decay_factor = 0.2
 lr_patience = 3
 es_patience = 12
+pool_factor=4
+kernel_size_factor=3
 
 # 2. --- Dataset parameters -------------------------------
 train_dir = PROJECT_PATH/'chromoformer'/'preprocessing'
@@ -117,60 +126,80 @@ qs = [
 # 3. --- Train models -------------------------------
 # loop through each fold
 for ind,fold in enumerate([x+1 for x in range(k_fold)]):
-    print(f"K-fold Cross-Validation - blind test: {ind}")
-    #get fold specific data ----
-    train_genes = qs[(fold + 0) % 4] + qs[(fold + 1) % 4] + qs[(fold + 2) % 4]
-    val_genes = qs[(fold + 3) % 4]
+    if not os.path.exists(str(f"{MOD_SAVE_PATH}/covnet_{cell}_{'-'.join(features)}_kfold{fold}")):
+        print(f"K-fold Cross-Validation - blind test: {ind}")
+        #get fold specific data ----
+        train_genes = qs[(fold + 0) % 4] + qs[(fold + 1) % 4] + qs[(fold + 2) % 4]
+        val_genes = qs[(fold + 3) % 4]
 
-    #split val_genes in two to get validation and test set
-    # train/val split by chrom so do the same for val test
-    val_test_genes = val_genes
-    val_test_chrom = list(set(meta[meta.gene_id.isin(val_test_genes)]['chrom']))
-    val_chrom = val_test_chrom[0:len(val_test_chrom)//2]
-    test_chrom = val_test_chrom[len(val_test_chrom)//2:len(val_test_chrom)]
-    val_genes = meta[meta.gene_id.isin(val_test_genes) & meta.chrom.isin(val_chrom)]['gene_id'].tolist()
-    test_genes = meta[meta.gene_id.isin(val_test_genes) & meta.chrom.isin(test_chrom)]['gene_id'].tolist()
-    #----
-    #data loaders ----
-    training_generator = Roadmap3D_tf(cell, train_genes, batch_size=batch_size,
-                                      w_prom=window_size, w_max=window_size,
-                                      marks = features,y_type=y_type,
-                                      pred_res = pred_resolution,
-                                      return_pcres=False)
-    validation_generator = Roadmap3D_tf(cell, val_genes, batch_size=batch_size,
-                                        w_prom=window_size, w_max=window_size,
-                                        marks = features,y_type=y_type,
-                                        pred_res = pred_resolution,
-                                        return_pcres=False)
-    #----
-    #train ----
-    print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
+        #split val_genes in two to get validation and test set
+        # train/val split by chrom so do the same for val test
+        val_test_genes = val_genes
+        val_test_chrom = list(set(meta[meta.gene_id.isin(val_test_genes)]['chrom']))
+        val_chrom = val_test_chrom[0:len(val_test_chrom)//2]
+        test_chrom = val_test_chrom[len(val_test_chrom)//2:len(val_test_chrom)]
+        val_genes = meta[meta.gene_id.isin(val_test_genes) & meta.chrom.isin(val_chrom)]['gene_id'].tolist()
+        test_genes = meta[meta.gene_id.isin(val_test_genes) & meta.chrom.isin(test_chrom)]['gene_id'].tolist()
+        #----
+        #data loaders ----
+        training_generator = Roadmap3D_tf(cell, train_genes, batch_size=batch_size,
+                                          w_prom=window_size, w_max=window_size,
+                                          marks = features,y_type=y_type,
+                                          pred_res = pred_resolution,
+                                          return_pcres=False)
+        validation_generator = Roadmap3D_tf(cell, val_genes, batch_size=batch_size,
+                                            w_prom=window_size, w_max=window_size,
+                                            marks = features,y_type=y_type,
+                                            pred_res = pred_resolution,
+                                            return_pcres=False)
+        #----
+        #train ----
+        print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 
-    # import conv model
-    model = conv_profile_task_base(output_shape=[1,1],window_size=window_size,
-                                   pred_res=pred_resolution)
+        # import conv model
+        #model = conv_profile_task_base(output_shape=[1,1],window_size=window_size,
+        #                               pred_res=pred_resolution,pool_factor=pool_factor,
+        #                               kernel_size_factor=kernel_size_factor)
+        model = covnet(window_size=window_size,pred_res=pred_resolution)
 
-    #learning rate schedule
-    lr_schedule = tf.keras.callbacks.ReduceLROnPlateau(monitor="val_loss", 
-                                                     factor=lr_decay_factor, 
-                                                     patience=lr_patience)
-    #early stopping
-    es = tf.keras.callbacks.EarlyStopping(monitor='val_loss',patience=es_patience,
-                                          #save best weights
-                                          restore_best_weights=True)
+        #learning rate schedule
+        lr_schedule = tf.keras.callbacks.ReduceLROnPlateau(monitor="val_loss", 
+                                                         factor=lr_decay_factor, 
+                                                         patience=lr_patience)
+        #early stopping
+        es = tf.keras.callbacks.EarlyStopping(monitor='val_loss',patience=es_patience,
+                                              #save best weights
+                                              restore_best_weights=True)
 
-    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=init_learning_rate),
+        model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=init_learning_rate),
                   loss=tf.keras.losses.mean_squared_error,
-                  metrics='mse')
+                  metrics=['mse',pearsonR()])
 
-    # Train model on dataset
-    model.fit(training_generator,
-              validation_data=validation_generator,
-              epochs=n_epochs,
-              verbose=2,
-              use_multiprocessing=False,#started getting errors when set to True...
-              callbacks=[es,lr_schedule]
-             )
+        # Train model on dataset
+        #save to wandb if ind = 1
+        if fold==1:
+            readable_features = '-'.join(features)
+            wandb.init(
+                name=f'covnet_{cell}_{readable_features}_{fold}',
+                entity="al-murphy",
+                project="Epi_to_Express",
+            )
+            # Train model on dataset
+            model.fit(training_generator,
+                      validation_data=validation_generator,
+                      epochs=n_epochs,
+                      verbose=2,
+                      use_multiprocessing=False,#started getting errors when set to True...
+                      callbacks=[es,lr_schedule,WandbCallback(save_model=False)]
+                     )
+        else:    
+            model.fit(training_generator,
+                      validation_data=validation_generator,
+                      epochs=n_epochs,
+                      verbose=2,
+                      use_multiprocessing=False,#started getting errors when set to True...
+                      callbacks=[es,lr_schedule]
+                     )
 
-    model.save(f"{MOD_SAVE_PATH}/mod_{'-'.join(cell)}_{'-'.join(features)}_kfold{ind}")
+        model.save(f"{MOD_SAVE_PATH}/covnet_{cell}_{'-'.join(features)}_kfold{fold}")
 

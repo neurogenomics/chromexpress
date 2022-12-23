@@ -8,6 +8,7 @@ However:
 * Only considered 2 T-cells
 * Used a linear model
 * Only considered promoter histone mark information (i.e. very short range)
+* Used linear regression for this
 
 Our work here expands on this by considering more cell types to see if there are universal histone marks
 which are predictive, considers far wider sequences of histone mark information which should encourage
