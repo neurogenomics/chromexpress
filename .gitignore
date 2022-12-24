@@ -135,6 +135,9 @@ pbs/*
 pbs_*
 #HPC PBS returns
 *.pbs.*
+#wandb
+wandb/
+wandb/*
 
 #don't save data
 data/expression/*
