@@ -10,6 +10,16 @@ However:
 * Only considered promoter histone mark information (i.e. very short range)
 * Used linear regression for this
 
+Another approach [Differential contribution to gene expression prediction of histone modifications at enhancers or promoters](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1009368). Found predictive marks at enhancers are also (as well as at promoters) predictive of expression. Defined states in the genome of regions that are active/repressive based own histone marks present and split into enhancers (by known enhancer mark) and promoters (by overlap with TSS). Then linked enhancers to genes using Hi-C data. Created two models, one built on the enhancer positions and one on the promoters and then looked at variable importance of the marks in these. However:
+
+* Only looked at mouse embryonic stem cells (ESC)
+* Only 4 histone marks: H3K4me3, H3K27me3, H3K27ac, and H3K4me1 to define enhancer and promoter regions
+* Used 10 hist marks to predict expression.
+* Used a linear model local regression (LOESS) which weights contribution by distance from the TSS
+* Included promoters and enhancers
+* Found H3K27me3 — a histone modification associated with transcriptional gene repression — was the prevalent mark in both enhancer and promoter model. Found H3K27ac importance in the enhancer model was masked by H3K27me3. Removing H3K27me3 from enhancer model only slightly dropped performance and then H3K27ac was the most important mark.
+* It seems circular that they pick the training regions using 4 marks and then use these regions as inputs to the model measuring 10 marks
+
 Our work here expands on this by considering more cell types to see if there are universal histone marks
 which are predictive, considers far wider sequences of histone mark information which should encourage
 enhancer and other long range marks and finally, uses neural networks which is more in line with current
@@ -31,62 +41,74 @@ normalized expression unit that is used for identifying the differentially expre
 the RPKM values between different experimental conditions. Generally, the higher the RPKM of a gene, 
 the higher the expression of that gene. 
 
-Here we normalised the RPKM per **cell** to be in the 0 - 1 range.
+Here we normalised the log2RPKM (specifcally log2(RPKM+1) to avoid numerical errors)
 
 ## Aim
 The aim of the project is to try and infer which histone mark or chromatin accessibility assay
 does the best job of predicting expression profiles in the same cell type.
 
-* The same neural network architecture will be applied
-* A variation of the CNN model from [Evaluating deep learning for predicting epigenomic profiles](https://www.biorxiv.org/content/10.1101/2022.04.29.490059v1.full) 
-will be used: 
-    * trained for up to 100 epochs 
-    * ADAM(default params)
+* The same neural network architectures will be applied to all marks - one large and one narrow input window model.
+* A variation of the CNN model, similar to that proposed in [DeepChrome: deep-learning for predicting gene expression from histone modifications](https://academic.oup.com/bioinformatics/article/32/17/i639/2450757) was developed for the short range model: 
+    * Input window 6k bp around TSS
+    * ADAM(default params) optimiser
+* [chromoformer](https://www.nature.com/articles/s41467-022-34152-5) will be used as the large window input model:
+    * 40k window around TSS - uses attention
+    * AdamW optimiser
+it can approximately shrink to half of its value after each of the five epochs.
+* Both models will use:
+    * mean squared error (MSE) loss function.
+    * The models will predict the continuous log2RPKM expression values per cell.
+    * 4 fold cross-validation approach with validation dataset proportion of 12.5% and test of 12.5%. Thus 75% for training on each fold.
+    * Trained for up to 100 epochs
     * Early stopping with patience of 12 epochs.
-    * The initial learning rate was set to 0.001 
-    * Learning rate decay by a factor of 0.2 with a patience of 3 epochs. 
-    * Batch size 128.
-* The model will predict the normalised continuous RPKM expression values per cell.
-* Assay data 10k bp around the gene of interest will be considered (same window size as org study).
-* 5 fold cross-validation approach with validation dataset proportion of 30% (split by chromosome)
-* Mulitiple cells will be tested and scored aggregated
-* Mulitiple histone mark/chromsome accessibility assays will be tested and benchmarked.
-* Whole chromosomes of genes will be held out for the blind test.
-* Combinations won't be considered yet)
+    * The initial learning rate was set to 0.001
+    * Learning rate decay by a factor of 0.2 with a patience of 3 epochs.
+    * Batch size 64.
+    * Mulitiple cells will be tested and scored aggregated
+    * Mulitiple histone mark/chromsome accessibility assays will be tested and benchmarked.
+    * Combinations won't be considered **yet**.
 
 ## Data
 ROADMAP data is used for this project since it is less sparse and more uniformly processed (e.g.
 sequencing depth). See `ROADMAP_training_assays_and_cells.ipynb` but in short, the **11** cells/tissues 
 being used are:
-* E003 : H1 Cell Line
-* E114 : A549
-* E116 : GM12878
-* E117 : HELA
-* E118 : HEPG2
-* E119 : HMEC
-* E120 : HSMM
-* E122 : HUVEC
-* E123 : K562
-* E127 : NHEK
-* E128 : NHLF
+* E003 : H1 cells
+* E004 : H1 BMP4 derived mesendoderm
+* E005 : H1 BMP4 derived trophoblast
+* E006 : H1 derived mesenchymal stem cells
+* E007 : H1 derived neuronal progenitor cultured cells
+* E016 : HUES64 cells
+* E066 : Liver
+* E087 : Pancreatic islets
+* E114 : A549 EtOH 0.02pct lung carcinoma
+* E116 : GM12878 lymphoblastoid
+* E118 : HepG2 hepatocellular carcinoma
 
-The **12** assays to be investigated are:
+The **7** histone marks to be investigated are:
 * H3K36me3
 * H3K4me1
 * H3K4me3
 * H3K9me3
 * H3K27me3
 * H3K27ac
-* DNase
 * H3K9ac
-* H3K4me2
-* H2A
-* H3K79me2
-* H4K20me1
 
-These were used to predict expression. RPKM expression matrix for **protein coding** genes were modelled.
+These were used to predict expression. log2RPKM expression matrix for **protein coding** genes were modelled. 
+
+Performance was measured by Pearson R.
 
 All data was aligned to hg19.
+
+## Approach
+
+* Use the chromoformer model and another, simple CNN model (from above to compare)
+* The receptive window of the CNN model will be less so you might see interesting things 
+like promoter specific histone marks might be enough/do better than enhancer ones with this model.
+* Train on the 11 cell types from chromoformer and their data but create test dataset
+not just train/val. Also do 4 fold CV.
+* Separate model created for each cell type and each fold.
+* Try combinations of histone marks and single histone marks
+* Inspect effect of altering histone marks at certain positions (maybe)
 
 ## Steps
 
@@ -94,47 +116,17 @@ Use the conda environments (yaml files in ./environments) for the steps.
 
 ### 1. Download Data
 
-To download all necessary files (in parallel) run:
-
-```
-python bin/download_data_parallel.py
-```
-
-with the epi_to_express conda env.
-
-**Also** run the below command with the same env to get the reference genome data for grch37:
-
-```
-pyensembl install --release 75 --species homo_sapiens
-```
-
-### 2. Convert all bigwigs to 25bp resolution files
-
-The model averages predicitons to 25bp resolution. So the data tracks need to be
-adjusted to this resolution. Use the r_bioc environment to do this and run the script:
-
-```
-bash bin/avg_bigwig_tracks.sh
-```
-
-Note you might need to change permissions on all bigwigs before running this:
-
-```
-chmod 777 ./data/*
-```
-
-### train the models
+Follow steps in chromoformer repo embedded in this repo to download all data.
 
 
-## Next Steps
-* Increase window from 10k
-* Test combinations
-* Test TF binding as well as hist marks and chrom access
+### 2. train the models
+TO DO Add scripts to run....
 
+### 3. Measure performance
+TO DO add jupyternotebooks to inspect
 
-## Second model and data approach
-
-We will use [chromoformer](https://www.nature.com/articles/s41467-022-34152-5) model:
+## Background on chromoformer original study
+[chromoformer](https://www.nature.com/articles/s41467-022-34152-5) model:
 * Predict gene expression from histone marks. Identified distal important regions from pcHi-C data.
 * Trained on and predicted in the same cell type (not in previously unseen cell types - just on held out chromosomes)
 * Three independent modules were used to produce multi-scale representation of gene expression regulation. Each of the modules is fed with input HM features at different resolutions (100/500/2k bp) to produce an embedding vector reflecting the regulatory state of the core promoter. Each module passed through a transformer.
@@ -145,24 +137,9 @@ We will use [chromoformer](https://www.nature.com/articles/s41467-022-34152-5) m
 * Trained on ROADMAP data (11 cell types). To benchmark they split genes in 4-fold CV and trained 4 times to get performance. 
 * The model was also used to do a small amount of cross-species and cross cell-type predictions (in discussion section).
 * They did some validation of what the attention layers are picking up, might be worth exploring.
-
-### Model training specifics
-* mean squared error (MSE) loss function
-* log2-transformed RPKM values were used for Chromoformer-reg training - using this approach too 
-* 10 training epochs - AdamW optimiser
-* The initial learning rate was chosen as 3×10−5 and was decreased by 13% after each epoch so that
+* Model training specifics
+    * mean squared error (MSE) loss function
+    * log2-transformed RPKM values were used for Chromoformer-reg training - using this approach too 
+    * 10 training epochs - AdamW optimiser
+    * The initial learning rate was chosen as 3×10−5 and was decreased by 13% after each epoch so that
 it can approximately shrink to half of its value after each of the five epochs.
-* Batch size was fixed to 64
-
-
-### Approach
-
-* Use the chromoformer model and another, simple CNN model (from above to compare)
-* The receptive window of the CNN model will be less so you might see interesting things 
-like promoter specific histone marks might be enough/do better than enhancer ones with this model.
-* Train on the 11 cell types from chromoformer and their data but create test dataset 
-not just train/val. Also do 4 fold CV.
-* Separate model created for each cell type and each fold.
-* Try combinations of histone marks and single histone marks
-* Inspect effect of altering histone marks at certain positions (maybe)
-

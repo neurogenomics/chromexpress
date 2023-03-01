@@ -1,10 +1,4 @@
 """Main module to load and train the model. This should be the program entry point."""
-
-##TO DO:
-#Update data loader to output just y_type
-#Update chromoformer to also wrok with just y_type
-#Update metrics being monitored to match otr model - MSE & Pearson R
-
 #generic imports
 import os
 import pathlib
@@ -34,7 +28,6 @@ from epi_to_express.constants import (
 
 #model imports
 #data loading imports
-from epi_to_express.utils import pearsonR
 import argparse
 import torch
 import torch.nn as nn
@@ -50,9 +43,12 @@ from chromoformer.chromoformer.net import Chromoformer
 from tqdm import tqdm
 from pathlib import Path
 from sklearn import metrics
-from scipy import stats
+#from scipy import stats
+from torchmetrics.functional import pearson_corrcoef
 
-from chromoformer.chromoformer.util import seed_everything
+from chromoformer.chromoformer.util import(seed_everything,
+                                           EarlyStopping,
+                                           LRScheduler)
 
 #pass inputs
 # argv
@@ -71,7 +67,7 @@ CELL=CELL.strip()
 #assert it's a valid choice
 assert CELL in SAMPLE_IDS, f"{CELL} not valid. Must choose valid cell: {SAMPLE_IDS}"
 
-MARK='h3k4me1'#args.MARK.lower()
+MARK='h3k4me1'#'h3k27ac'#args.MARK.lower()
 MARK=MARK.strip()
 #assert it's a valid choice
 assert MARK in ASSAYS, f"{MARK} not valid. Must choose valid assay: {ASSAYS}"
@@ -104,11 +100,17 @@ seed = 123
 #regression problem
 y_type = 'log2RPKM'
 
+def get_lr(optimizer):
+    for param_group in optimizer.param_groups:
+        return param_group['lr']
+
 # Model specifics - similar to https://www.nature.com/articles/s42256-022-00570-9
 batch_size = 64
-n_epochs = 10
-
-lr = 3e-5
+n_epochs = 100#10
+init_learning_rate = 0.001#3e-5
+lr_decay_factor = 0.2
+lr_patience = 3
+es_patience = 12
 gamma = 0.87
 i_max = 8
 embed_n_layers = 1
@@ -153,6 +155,8 @@ qs = [
 for ind,fold in enumerate([x+1 for x in range(k_fold)]):
     if not os.path.exists(str(f"{MOD_SAVE_PATH}/chromoformer_{cell}_{'-'.join(features)}_kfold{fold}")):
         print(f"K-fold Cross-Validation - blind test: {ind}")
+        #set values for early stopping
+        min_val_mse = 1_000_000
         #get fold specific data ----
         train_genes = qs[(fold + 0) % 4] + qs[(fold + 1) % 4] + qs[(fold + 2) % 4]
         val_genes = qs[(fold + 3) % 4]
@@ -168,9 +172,9 @@ for ind,fold in enumerate([x+1 for x in range(k_fold)]):
         #----
         # 2. --- Dataset parameters -------------------------------
         train_dataset = Roadmap3D(cell, train_genes, i_max, window_size, window_size,
-                                  marks=features,train_dir=train_dir)
+                                  marks=features,train_dir=train_dir,train_meta=train_meta)
         val_dataset = Roadmap3D(cell, val_genes, i_max, window_size, window_size,
-                                marks=features,train_dir=train_dir)
+                                marks=features,train_dir=train_dir,train_meta=train_meta)
 
         train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, 
                                                    num_workers=8, shuffle=True, drop_last=True)
@@ -178,15 +182,24 @@ for ind,fold in enumerate([x+1 for x in range(k_fold)]):
                                                  num_workers=8)
 
         model = Chromoformer(
-            1, embed_n_layers, embed_n_heads, embed_d_model, embed_d_ff, #1 feature input
-            pw_int_n_layers, pw_int_n_heads, pw_int_d_model, pw_int_d_ff,
-            reg_n_layers, reg_n_heads, reg_d_model, reg_d_ff, head_n_feats,
+            n_feats=len(features), embed_n_layers=embed_n_layers, #1 feature input
+            embed_n_heads = embed_n_heads, embed_d_model=embed_d_model, 
+            embed_d_ff=embed_d_ff, pw_int_n_layers=pw_int_n_layers, 
+            pw_int_n_heads=pw_int_n_heads, pw_int_d_model=pw_int_d_model, 
+            pw_int_d_ff=pw_int_d_ff,reg_n_layers=reg_n_layers, 
+            reg_n_heads=reg_n_heads, reg_d_model=reg_d_model, 
+            reg_d_ff=reg_d_ff, head_n_feats=head_n_feats
         )
         model.cuda()
 
         criterion = nn.MSELoss()
-        optimizer = torch.optim.AdamW(model.parameters(), lr=float(lr))
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=gamma)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=float(init_learning_rate))
+        
+        #scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=gamma)
+        # Initialising learning rate scheduler
+        lr_scheduler = LRScheduler(optimizer, patience=lr_patience, factor=lr_decay_factor)
+        #Initialising early stopping
+        early_stopping = EarlyStopping(patience = es_patience)
 
         optimizer.zero_grad()
         optimizer.step()
@@ -200,9 +213,8 @@ for ind,fold in enumerate([x+1 for x in range(k_fold)]):
                 project="Epi_to_Express",
             )
         
-        best_val_auc = 0
-        for epoch in range(1, n_epochs):
-
+        for epoch in range(0, n_epochs):
+            print('epoch',epoch)
             # Prepare train.
             bar = tqdm(enumerate(train_loader, 1), total=len(train_loader))
             running_loss = 0.0
@@ -225,8 +237,9 @@ for ind,fold in enumerate([x+1 for x in range(k_fold)]):
                     d['pad_mask_pcre_100'], d['interaction_mask_2000'],
                     d['interaction_freq'],
                 )
-                loss = criterion(out, d['label'])
-
+                y = d['log2RPKM'].float().unsqueeze(1)
+                loss = criterion(out,y)
+                
                 loss.backward()
                 optimizer.step()
 
@@ -234,30 +247,27 @@ for ind,fold in enumerate([x+1 for x in range(k_fold)]):
                 running_loss += loss
 
                 train_out.append(out.detach().cpu())
-                train_label.append(d['label'].cpu())
-
-                if batch % 10 == 0:
-                    batch_loss = running_loss / 10.
+                train_label.append(d['log2RPKM'].unsqueeze(1).cpu())
+                
+                #save training error at end of epoch
+                if batch == len(train_loader):
+                    print('batch == len(train_loader):')
+                    print('batch',batch)
+                    batch_loss = running_loss / len(train_loader)
 
                     train_out, train_label = map(torch.cat, (train_out, train_label))
-                    train_score = train_out.softmax(axis=1)[:, 1]
-                    train_pred = train_out.argmax(axis=1)
+                    #train_score = train_out.softmax(axis=1)[:, 1]
+                    #train_pred = train_out.argmax(axis=1)
                     
-                    batch_mse = metrics.mean_squared_error(train_label, train_pred)
-                    batch_corr = stats.pearsonr(train_label, train_score)
+                    batch_mse = metrics.mean_squared_error(train_label, train_out)
                     
-                    bar.set_description(f'E{epoch} {batch_loss:.4f}, lr={get_lr(optimizer)}, mse={batch_mse:.4f}, corr={batch_corr:.4f}')
+                    #batch_corr = stats.pearsonr(train_label, train_out)
+                    batch_corr = pearson_corrcoef(train_label[:,0], train_out[:,0])
+                    bar.set_description(f'E{epoch} {batch_loss:.4f}, lr={get_lr(optimizer)}, mse={batch_mse}, corr={batch_corr}')
 
                     running_loss = 0.0
                     train_out, train_label = [], []
-                    if fold==1:
-                        wandb.log({
-                            'loss': batch_loss,
-                            'mse': batch_mse,
-                            'correlation': batch_corr,
-                            'lr': get_lr(optimizer),
-                            'epoch': epoch,
-                        })
+                        
 
             # Prepare validation.
             bar = tqdm(enumerate(val_loader, 1), total=len(val_loader))
@@ -281,7 +291,7 @@ for ind,fold in enumerate([x+1 for x in range(k_fold)]):
                     )
                     val_out.append(out.cpu())
 
-                    val_label.append(d['label'].cpu())
+                    val_label.append(d['log2RPKM'].unsqueeze(1).cpu())
 
             val_out = torch.cat(val_out)
             val_label = torch.cat(val_label)
@@ -289,36 +299,46 @@ for ind,fold in enumerate([x+1 for x in range(k_fold)]):
             val_loss = criterion(val_out, val_label)
 
             # Metrics.
-            val_label = val_label.numpy()
-            val_score = val_out.softmax(axis=1)[:, 1].numpy()
-            val_pred = val_out.argmax(axis=1).numpy()
+            #val_label = val_label.numpy()
+            #val_score = val_out.softmax(axis=1)[:, 1].numpy()
+            #val_pred = val_out.argmax(axis=1).numpy()
             
-            val_mse = metrics.mean_squared_error(val_label, val_pred)
-            val_corr = stats.pearsonr(val_label, val_score)
-
-            print(f'Validation loss={val_loss:.4f}, mse={val_mse:.4f}, corr={val_corr:.4f}')
+            val_mse = metrics.mean_squared_error(val_label, val_out)
+            val_corr = pearson_corrcoef(val_label[:,0], val_out[:,0])
+            
+            print(f'Validation loss={val_loss:.4f}, mse={val_mse}, corr={val_corr}')
             if fold==1:
                 wandb.log({
+                    'loss': batch_loss,
+                    'mse': batch_mse,
+                    'correlation': batch_corr,
+                    'lr': get_lr(optimizer),
                     'val_loss': val_loss,
                     'val_mse': val_mse,
                     'val_correlation': val_corr,
-                    'val_epoch': epoch,
+                    'epoch': epoch,
                 })
-
-            ckpt = {
-                'net': model.state_dict(),
-                'optimizer': optimizer.state_dict(),
-                'epoch': epoch,
-                'last_val_loss': val_loss,
-                'last_val_auc': val_auc,
-                'val_score': val_score,
-                'val_label': val_label,
-            }
-            torch.save(ckpt, f"{MOD_SAVE_PATH}/chromoformer_{cell}_{'-'.join(features)}_kfold{fold}")
-            scheduler.step()
-        if fold==1:
-            wandb.summary.update({
-                'last_val_loss': val_loss,
-                'last_val_auc': val_auc,
-            })
+            if val_mse < min_val_mse:
+                min_val_mse = val_mse   
+                ckpt = {
+                    'net': model.state_dict(),
+                    'optimizer': optimizer.state_dict(),
+                    'epoch': epoch,
+                    'last_val_loss': val_loss,
+                    'last_val_mse': val_mse,
+                    'last_val_corr': val_corr,
+                    'val_act': val_label,
+                    'val_pred': val_out,
+                }
+                torch.save(ckpt, f"{MOD_SAVE_PATH}/chromoformer_{cell}_{'-'.join(features)}_kfold{fold}")
+            #learning rate
+            lr_scheduler(val_loss)
+            #early stopping
+            early_stopping(val_loss)
+            if early_stopping.early_stop:
+                break
+            #scheduler.step()
+        #save result after 100 epochs or es
+        print('epoch',epoch)
+        print(aa)
 

@@ -133,7 +133,6 @@ def covnet(num_tasks=1,window_size=6_000,pred_res=100,
 
     #output layer
     outputs = tf.keras.layers.Dense(num_tasks,activation=output_activation)(x)
-    print(outputs.shape)
     return tf.keras.Model(inputs=inputs, outputs=outputs,name="covnet")
 
 def residual_block(input_layer, kernel_size=3, activation='relu', num_layers=5, dropout=0.1):

@@ -1,0 +1,15 @@
+﻿Comments,Epigenome ID (EID),ORDER,GROUP,COLOR,Epigenome Mnemonic,Under Seq,Quality Rating,Auto Use Train (Core),Manual Use Train (Core),Has K27ac,Train Core + K27ac,Core + Ac + DNase + 9 Class1 Marks,Core + Ac + DNase + 13 Class1 Marks,Standardized Epigenome name,Epigenome name (from EDACC Release 9 directory),ANATOMY,TYPE,"LAB
+(Based on 5 core histone marks only)","AGE
+(Post Birth in YEARS/ Fetal in GESTATIONAL WEEKS/CELL LINE CL)","SEX
+(Male, Female, Mixed, Unknown)",SOLID / LIQUID,ETHNICITY,Single Donor (SD) /Composite (C),DONOR / SAMPLE ALIAS,CLASS
+,E016,7,ESC,#924965,ESC.HUES64,1,1,1,1,1,1,0,0,HUES64 Cells,HUES64_Cell_Line,ESC,PrimaryCulture,BI,CL,Male,NA,NA,SD,196;202;BioSam_825,Class 2
+Outlier DNA methylation dataset (older platform),E003,8,ESC,#924965,ESC.H1,1,1,1,1,1,1,1,1,H1 Cells,H1_Cell_Line,ESC,PrimaryCulture,BI;UCSD;UCSF-UBC,CL,Male,NA,NA,SD,56;68;69;27276;27277;35081;35082;35083;CDI-01;H1-07;H1-09;H1-10;H1-12;H1-13;hESC-01;HS0995;HS0998-1;HS1032-1;HS1345-1;HS1346-1;HS1347-1,Class 1
+,E007,15,ES-deriv,#4178AE,ESDR.H1.NEUR.PROG,1,0,1,0,1,0,1,0,H1 Derived Neuronal Progenitor Cultured Cells,H1_Derived_Neuronal_Progenitor_Cultured_Cells,ESC_DERIVED,ESCDerived,UCSD,CL,Male,NA,NA,SD,NPC-03;NPC-04;NPC-05;NPC-06,Class 1
+,E004,21,ES-deriv,#4178AE,ESDR.H1.BMP4.MESO,1,0,1,0,1,0,1,0,H1 BMP4 Derived Mesendoderm Cultured Cells,H1_BMP4_Derived_Mesendoderm_Cultured_Cells,ESC_DERIVED,ESCDerived,UCSD,CL,Male,NA,NA,SD,BMP4-03;BMP4-04;BMP4-07;BMP4-08,Class 1
+,E005,22,ES-deriv,#4178AE,ESDR.H1.BMP4.TROP,1,1,1,1,1,1,1,1,H1 BMP4 Derived Trophoblast Cultured Cells,H1_BMP4_Derived_Trophoblast_Cultured_Cells,ESC_DERIVED,ESCDerived,UCSD,CL,Male,NA,NA,SD,BMP4-05;BMP4-06;BMP4-09,Class 1
+,E006,23,ES-deriv,#4178AE,ESDR.H1.MSC,1,1,1,1,1,1,1,1,H1 Derived Mesenchymal Stem Cells,H1_Derived_Mesenchymal_Stem_Cells,ESC_DERIVED,ESCDerived,UCSD,CL,Male,NA,NA,SD,MSC-01;MSC-02,Class 1
+,E087,105,Other,#999999,PANC.ISLT,-1,1,0,0,1,0,0,0,Pancreatic Islets,Pancreatic_Islets,PANCREAS,PrimaryTissue,BI;UCSF-UBC,"Unknown, Unknown, 45Y",Male,SOLID,"Unknown, Unknown, Caucasian",C,pancreatic_islets_normal_0/0/00;pancreatic_islets_normal_3/27/09;ZD4_273,Class 4
+,E066,108,Other,#999999,LIV.ADLT,1,1,1,1,1,1,0,0,Liver,Adult_Liver,LIVER,PrimaryTissue,BI,Unknown,Mixed,SOLID,Unknown,C,3;4;5,Class 2
+,E114,112,ENCODE2012,#000000,LNG.A549.ETOH002.CNCR,1,-1,0,0,1,0,0,0,A549 EtOH 0.02pct Lung Carcinoma Cell Line,A549_EtOH_0.02pct_Lung_Carcinoma,LUNG,CellLine,BI,,Male,,,SD,A549,ENCODE
+,E116,114,ENCODE2012,#000000,BLD.GM12878,1,0,1,0,1,0,0,0,GM12878 Lymphoblastoid Cells,GM12878_Lymphoblastoid,BLOOD,PrimaryCulture,BI,,Female,,Caucasian,SD,GM12878,ENCODE
+,E118,116,ENCODE2012,#000000,LIV.HEPG2.CNCR,0,1,1,1,1,1,0,0,HepG2 Hepatocellular Carcinoma Cell Line,HepG2_Hepatocellular_Carcinoma,LIVER,CellLine,BI,,Male,,,SD,HepG2,ENCODE
