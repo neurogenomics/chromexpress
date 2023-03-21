@@ -69,9 +69,11 @@ assert CELL in SAMPLE_IDS, f"{CELL} not valid. Must choose valid cell: {SAMPLE_I
 
 MARK=args.MARK.lower()
 MARK=MARK.strip()
+#split if mutliple mark inputs passed
+MARK = MARK.split(',')
 #assert it's a valid choice
-assert MARK in ASSAYS, f"{MARK} not valid. Must choose valid assay: {ASSAYS}"
-
+for mark_i in MARK:
+        assert mark_i in ASSAYS, f"{mark_i} not valid. Must choose valid assay: {ASSAYS}"
 print("---------------------------------")
 print(CELL)
 print(MARK)
@@ -88,10 +90,10 @@ MOD_SAVE_PATH.mkdir(parents=True, exist_ok=True)
 # 1. --- SETUP PARAMETERS ------------------------------------------------
 
 #what will be used to predict expression
-features = [MARK]
+features = MARK
 #what cell will we predict in
 cell = CELL
-# 1 Mb of the assay will be considered for the prediction of gene expression
+# window to be considered for expression pred
 window_size = 40_000
 #number of k-fold cross validation
 k_fold = 4
