@@ -82,9 +82,11 @@ class Roadmap3D_tf(tf.keras.utils.Sequence):
     """
     def __init__(self, cell, target_genes, batch_size, shuffle = True, 
                  i_max=8, w_prom=40_000, w_max=40_000, marks = ASSAYS,
-                 pred_res = 100,y_type='log2RPKM',return_pcres=False):
+                 pred_res = 100,y_type='log2RPKM',return_pcres=False,
+                 return_gene=False):
         self.eid = cell
         self.target_genes = target_genes # List of ENSGs.
+        self.return_gene = return_gene
         meta = pd.read_csv(train_meta)
         #expression in meta is raw expression (RPKM) taken from here:
         #https://egg2.wustl.edu/roadmap/data/byDataType/rna/expression/57epigenomes.RPKM.pc.gz
@@ -127,7 +129,7 @@ class Roadmap3D_tf(tf.keras.utils.Sequence):
         l = tf.shape(x)[1]
         n_bins = math.ceil(l / bin_size)
 
-        # Binning.
+        # Binning
         x_binned = []
         for i in range(n_bins):
             b = tf.math.reduce_mean(x[:, i * bin_size: (i + 1) * bin_size],
@@ -136,7 +138,7 @@ class Roadmap3D_tf(tf.keras.utils.Sequence):
             x_binned.append(b)
         x_binned = tf.concat(x_binned, axis=1)
 
-        # Padding.
+        # Padding
         left_pad = math.ceil( (max_n_bins - n_bins) / 2 )
         right_pad = math.floor( (max_n_bins - n_bins) / 2 )
         x_binned = tf.concat([
@@ -144,11 +146,6 @@ class Roadmap3D_tf(tf.keras.utils.Sequence):
             x_binned,
             tf.zeros([tf.shape(x)[0], right_pad]),
         ], axis=1)
-        #x_binned = np.concatenate([
-        #    np.zeros([x.shape[0], left_pad]),
-        #    x_binned,
-        #    np.zeros([x.shape[0], right_pad]),
-        #], axis=1)
 
         return x_binned, left_pad, n_bins, right_pad
     
@@ -202,8 +199,10 @@ class Roadmap3D_tf(tf.keras.utils.Sequence):
         X_pad_mask_pcre_bin_size = []
         X_interaction_freq = []
         X_interaction_mask_bin_size = []
+        X_genes = []
         for index in btch_ind:
             target_gene = self.target_genes[index]
+            X_genes.append(target_gene)
             assert target_gene in self.ensg2tss, f"Unknown gene - {target_gene}"
 
             pcres, scores = self.ensg2pcres[target_gene], self.ensg2scores[target_gene]
@@ -297,6 +296,9 @@ class Roadmap3D_tf(tf.keras.utils.Sequence):
                   'interaction_freq':tf.concat(X_interaction_freq,axis=0),
                   'interaction_mask_pred_res':tf.concat(X_interaction_mask_bin_size,axis=0)
                   })
+        elif self.return_gene:
+            X = ({'x_p_pred_res':tf.concat(X_x_p_bin_size,axis=0),
+                  'gene_ids':X_genes})
         else:
             X = ({'x_p_pred_res':tf.concat(X_x_p_bin_size,axis=0)})
             #X = ({'x_p_pred_res':np.concatenate(X_x_p_bin_size,axis=0)})
