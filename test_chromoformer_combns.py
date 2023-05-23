@@ -70,12 +70,19 @@ train_dir = PROJECT_PATH/'chromoformer'/'preprocessing'
 train_meta = train_dir / 'train.csv'
 
 #combinations to consider
-ASSAYS_pairs = [['h3k4me3','h3k27ac'],['h3k4me3','h3k36me3'],
+ASSAYS_pairs = [#h3k4me3 combins
+                ['h3k4me3','h3k27ac'],['h3k4me3','h3k36me3'],
                 ['h3k4me3','h3k4me1'],['h3k4me3','h3k27me3'],
                 ['h3k4me3','h3k9me3'],
+                ['h3k4me3','h3k9ac'],
+                #h3k9ac combins
                 ['h3k9ac','h3k27ac'],['h3k9ac','h3k36me3'],
                 ['h3k9ac','h3k4me1'],['h3k9ac','h3k27me3'],
-                ['h3k9ac','h3k9me3']]
+                ['h3k9ac','h3k9me3'],
+                #h3k27ac combins
+                ['h3k27ac','h3k36me3'],
+                ['h3k27ac','h3k4me1'],['h3k27ac','h3k27me3'],
+                ['h3k27ac','h3k9me3'],]
 
 loss_fn = pearson_corrcoef
 losses = []

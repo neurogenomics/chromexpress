@@ -161,3 +161,19 @@ chromofomer/preprocessing/data
 #model results
 model_results/
 model_results/*
+
+#don't save chromoformer data
+chromoformer/exp/
+chromoformer/hist/
+chromoformer/data/
+chromoformer/data
+chromoformer/logs/
+chromoformer/benchmarks/
+chromoformer/ckpts/
+chromoformer/wandb/
+chromoformer/preprocessing/data
+chromoformer/preprocessing/data/*
+chromoformer/.snakemake/
+chromoformer/*_frag2neighbors.pickle
+chromoformer/*_pair2score.pickle
+

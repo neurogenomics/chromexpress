@@ -116,7 +116,8 @@ Use the conda environments (yaml files in ./environments) for the steps.
 
 ### 1. Download Data
 
-Follow steps in chromoformer repo embedded in this repo to download all data.
+Follow steps in [chromoformer](https://github.com/dohlee/chromoformer) repository embedded in this 
+repository to download all data for model training an evaluation.
 
 
 ### 2. train the models
