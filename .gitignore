@@ -173,6 +173,8 @@ chromoformer/ckpts/
 chromoformer/wandb/
 chromoformer/preprocessing/data
 chromoformer/preprocessing/data/*
+chromoformer/preprocessing/hist
+chromoformer/preprocessing/hist/*
 chromoformer/.snakemake/
 chromoformer/*_frag2neighbors.pickle
 chromoformer/*_pair2score.pickle

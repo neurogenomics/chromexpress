@@ -32,7 +32,6 @@ from epi_to_express.constants import (
 import tensorflow as tf
 #data loading imports
 from epi_to_express.utils import Roadmap3D_tf
-from epi_to_express.model import conv_profile_task_base
 from epi_to_express.model import covnet
 from epi_to_express.utils import pearsonR
 #pass inputs

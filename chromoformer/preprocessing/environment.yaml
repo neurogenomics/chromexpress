@@ -1,0 +1,12 @@
+name: chromoformer-preprocessing
+channels:
+    - conda-forge
+    - bioconda
+    - defaults
+dependencies:
+    - sambamba
+    - python=3.7
+    - bedtools
+    - pandas
+    - numpy
+    - tqdm
