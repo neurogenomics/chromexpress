@@ -167,6 +167,8 @@ chromoformer/exp/
 chromoformer/hist/
 chromoformer/data/
 chromoformer/data
+chromoformer/demo
+chromoformer/demo/*
 chromoformer/logs/
 chromoformer/benchmarks/
 chromoformer/ckpts/
