@@ -54,6 +54,7 @@ cells_ = []
 assays_ = []
 activity_ = []
 expression_ = []
+exp_label_ = []
 with torch.no_grad():
     for assay_i in ASSAYS:
         print(assay_i)
@@ -68,7 +69,7 @@ with torch.no_grad():
             #filter metadat to cell type of interest
             meta = meta[meta.eid == cell_i]
             # get genes
-            genes = set(meta.gene_id.unique()).tolist()
+            genes = list(set(meta.gene_id.unique()))
             n_genes = len(genes)
             #data loaders ----
             all_dataset = Roadmap3D(cell_i, genes,w_prom=window_size, w_max=window_size,
@@ -81,18 +82,18 @@ with torch.no_grad():
                 #get cell
                 cells_.append(cell_i)
                 #get mark
-                assays_.append(mark_i)
+                assays_.append(assay_i)
                 #get expression
-                print(item['log2RPKM'].float().unsqueeze(1))
-                expression_.append(item['log2RPKM'].float().unsqueeze(1))
+                expression_.append(item['log2RPKM'].cpu().float().unsqueeze(1).numpy()[0][0])
+                exp_label_.append(item['label'].cpu().float().unsqueeze(1).numpy()[0][0])
                 #get hist mark activity
-                print(item['x_p_pred_res'].numpy().mean())
-                activity_.append(item['x_p_pred_res'].numpy().mean())
-                
+                activity_.append(item[f'x_p_{pred_resolution}'].cpu().numpy().mean())
+
 #all res kept in order so can just make df and save
 res = pd.DataFrame({"cell":cells_,
                     "assay":assays_,
                     "log2RPKM":expression_,
+                    "exp_label":exp_label_,
                     "hist_mark_activity":activity_})
 #save res
 res.to_csv(str(PROJECT_PATH/'model_results/checkpoints/agg_hist_exp_chromo.csv'), sep='\t',index=False)

@@ -2,7 +2,7 @@
 
 Which epigenetic factors are the best predictors of gene expression? An analysis using ROADMAP data.
 
-[<img src="./epi_to_express.png" width="600" />](./epi_to_express.png)
+[<img src="./epi_to_express.png" width="800" />](./epi_to_express.png)
 
 
 Multiple past approaches have tried to address which histone marks are most predictive of expression
