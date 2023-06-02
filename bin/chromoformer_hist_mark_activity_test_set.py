@@ -40,6 +40,9 @@ seed = 123
 y_type = 'log2RPKM'
 # window to be considered for the prediction of gene expression
 window_size = 40_000
+#number of k-fold cross validation
+k_fold = 4
+batch_size = 64
 
 #paths
 SAVE_PATH = pathlib.Path("./model_results")
