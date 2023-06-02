@@ -12,9 +12,6 @@ import argparse
 import itertools
 import os.path
 
-#track models
-import wandb
-
 #import constants
 from epi_to_express.constants import (
     CHROM_LEN, 
@@ -56,6 +53,10 @@ def get_args():
     parser = argparse.ArgumentParser(description="train")
     parser.add_argument('-c', '--CELL', default='', type=str, help='Cell to train in')
     parser.add_argument('-m', '--MARK', default='', type=str, help='Mark to train on')
+    parser.add_argument('-wdb', '--wandb', default=True, type=bool, 
+                        help='Whether to track runs with wandb')
+    parser.add_argument('-wdb_e', '--wandb_entity', default='', type=str, help='wandb entity')
+    parser.add_argument('-wdb_p', '--wandb_project', default='', type=str, help='wandb project')
     args = parser.parse_args()
     return args
 
@@ -74,6 +75,16 @@ MARK = MARK.split(',')
 #assert it's a valid choice
 for mark_i in MARK:
         assert mark_i in ASSAYS, f"{mark_i} not valid. Must choose valid assay: {ASSAYS}"
+
+track_wandb=args.wandb
+wandb_entity=args.wandb_entity
+wandb_project=args.wandb_project
+
+
+if track_wandb:
+    #track models
+    import wandb
+
 print("---------------------------------")
 print(CELL)
 print(MARK)
@@ -204,12 +215,12 @@ for ind,fold in enumerate([x+1 for x in range(k_fold)]):
         optimizer.step()
         #----
         #save to wandb if ind = 1
-        if fold==1:
+        if fold==1 and track_wandb:
             readable_features = '-'.join(features)
             wandb.init(
                 name=f'chromoformer_{cell}_{readable_features}_{fold}',
-                entity="al-murphy",
-                project="Epi_to_Express",
+                entity=f"{wandb_entity}",
+                project=f"{wandb_project}",
             )
         
         for epoch in range(0, n_epochs):
@@ -298,7 +309,7 @@ for ind,fold in enumerate([x+1 for x in range(k_fold)]):
             val_corr = pearson_corrcoef(val_label[:,0], val_out[:,0])
 
             print(f'Validation loss={val_loss:.4f}, mse={val_mse}, corr={val_corr}')
-            if fold==1:
+            if fold==1 and track_wandb:
                 wandb.log({
                     'loss': batch_loss,
                     'mse': batch_mse,

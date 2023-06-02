@@ -12,9 +12,6 @@ import argparse
 import itertools
 import os.path
 
-#track models
-import wandb
-
 #import constants
 from epi_to_express.constants import (
     CHROM_LEN, 
@@ -50,27 +47,27 @@ from chromoformer.chromoformer.util import(seed_everything,
                                            EarlyStopping,
                                            LRScheduler)
 
-#pass inputs
-# argv
-#def get_args():
-#    parser = argparse.ArgumentParser(description="train")
-#    parser.add_argument('-c', '--CELL', default='', type=str, help='Cell to train in')
-#    parser.add_argument('-m', '--MARK', default='', type=str, help='Mark to train on')
-#    args = parser.parse_args()
-#    return args
+#TO ADD - cell, mark and wandb details if using
+CELL='E003'
+MARK='h3k4me1
+track_wandb=True
+wandb_entity=''
+wandb_project=''
 
-#args=get_args()
 
-CELL='E003'#args.CELL
 #leading and trailing whitespace
 CELL=CELL.strip()
 #assert it's a valid choice
 assert CELL in SAMPLE_IDS, f"{CELL} not valid. Must choose valid cell: {SAMPLE_IDS}"
 
-MARK='h3k4me1'#'h3k27ac'#args.MARK.lower()
 MARK=MARK.strip()
 #assert it's a valid choice
 assert MARK in ASSAYS, f"{MARK} not valid. Must choose valid assay: {ASSAYS}"
+
+
+if track_wandb:
+    #track models
+    import wandb
 
 print("---------------------------------")
 print(CELL)
@@ -205,14 +202,14 @@ for ind,fold in enumerate([x+1 for x in range(k_fold)]):
         optimizer.step()
         #----
         #save to wandb if ind = 1
-        if fold==1:
+        if fold==1 and track_wandb:
             readable_features = '-'.join(features)
             wandb.init(
                 name=f'chromoformer_{cell}_{readable_features}_{fold}',
-                entity="al-murphy",
-                project="Epi_to_Express",
+                entity=f"{wandb_entity}",
+                project=f"{wandb_project}",
             )
-        
+       
         for epoch in range(0, n_epochs):
             print('epoch',epoch)
             # Prepare train.
@@ -307,7 +304,7 @@ for ind,fold in enumerate([x+1 for x in range(k_fold)]):
             val_corr = pearson_corrcoef(val_label[:,0], val_out[:,0])
             
             print(f'Validation loss={val_loss:.4f}, mse={val_mse}, corr={val_corr}')
-            if fold==1:
+            if fold==1 and track_wandb:
                 wandb.log({
                     'loss': batch_loss,
                     'mse': batch_mse,

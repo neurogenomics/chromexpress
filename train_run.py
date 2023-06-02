@@ -11,11 +11,6 @@ import math
 import argparse
 import itertools
 
-#track models
-import wandb
-#from omegaconf import OmegaConf
-from wandb.keras import WandbCallback
-
 
 #import constants
 from epi_to_express.constants import (
@@ -34,13 +29,18 @@ import tensorflow as tf
 from epi_to_express.utils import Roadmap3D_tf
 from epi_to_express.model import covnet
 
-CELL='E003'#args.CELL
+
+#TO ADD - cell, mark and wandb details if using
+CELL='E003'
+MARK='h3k4me1
+track_wandb=True
+wandb_entity=''
+wandb_project=''
+
 #leading and trailing whitespace
 CELL=CELL.strip()
 #assert it's a valid choice
 assert CELL in SAMPLE_IDS, f"{CELL} not valid. Must choose valid cell: {SAMPLE_IDS}"
-
-MARK='h3k4me1'#args.MARK.lower()
 MARK=MARK.strip()
 #assert it's a valid choice
 assert MARK in ASSAYS, f"{MARK} not valid. Must choose valid assay: {ASSAYS}"
@@ -76,11 +76,15 @@ k_fold = 4
 #which fold to run 
 fold = 0
 readable_features = '-'.join(features)
-wandb.init(
-    name=f'covnet_6k_{cell}_{readable_features}_{fold}',
-    entity="al-murphy",
-    project="Epi_to_Express",
-)
+if track_wandb:
+    #track models
+    import wandb
+    from wandb.keras import WandbCallback
+    wandb.init(
+        name=f'covnet_{cell}_{readable_features}_{fold}',
+        entity=f"{wandb_entity}",
+        project=f"{wandb_project}",
+    )
 
 #seed
 seed = 123
@@ -170,13 +174,18 @@ model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=init_learning_rat
               loss=tf.keras.losses.mean_squared_error,
               metrics=['mse',pearsonR()])
 
+if track_wandb:
+    callbacks=[es,lr_schedule,WandbCallback(save_model=False)]
+else:    
+    callbacks=[es,lr_schedule]
+
 # Train model on dataset
 model.fit(training_generator,
           validation_data=validation_generator,
           epochs=n_epochs,
           verbose=2,
           use_multiprocessing=False,#started getting errors when set to True...
-          callbacks=[es,lr_schedule,WandbCallback(save_model=False)]
+          callbacks=callbacks
          )
 
 model.save(f"{MOD_SAVE_PATH}/covnet_{cell}_{'-'.join(features)}_kfold{ind}")

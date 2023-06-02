@@ -12,11 +12,6 @@ import argparse
 import itertools
 import os.path
 
-#track models
-import wandb
-#from omegaconf import OmegaConf
-from wandb.keras import WandbCallback
-
 #import constants
 from epi_to_express.constants import (
     CHROM_LEN, 
@@ -40,6 +35,10 @@ def get_args():
     parser = argparse.ArgumentParser(description="train")
     parser.add_argument('-c', '--CELL', default='', type=str, help='Cell to train in')
     parser.add_argument('-m', '--MARK', default='', type=str, help='Mark to train on')
+    parser.add_argument('-wdb', '--wandb', default=True, type=bool, 
+                        help='Whether to track runs with wandb')
+    parser.add_argument('-wdb_e', '--wandb_entity', default='', type=str, help='wandb entity')
+    parser.add_argument('-wdb_p', '--wandb_project', default='', type=str, help='wandb project')
     args = parser.parse_args()
     return args
 
@@ -56,6 +55,16 @@ MARK=MARK.strip()
 #assert it's a valid choice
 assert MARK in ASSAYS, f"{MARK} not valid. Must choose valid assay: {ASSAYS}"
 
+
+track_wandb=args.wandb
+wandb_entity=args.wandb_entity
+wandb_project=args.wandb_project
+
+if track_wandb:
+    #track models
+    import wandb
+    from wandb.keras import WandbCallback
+    
 print("---------------------------------")
 print(CELL)
 print(MARK)
@@ -177,19 +186,24 @@ for ind,fold in enumerate([x+1 for x in range(k_fold)]):
         # Train model on dataset
         #save to wandb if ind = 1
         if fold==1:
-            readable_features = '-'.join(features)
-            wandb.init(
-                name=f'covnet_{cell}_{readable_features}_{fold}',
-                entity="al-murphy",
-                project="Epi_to_Express",
-            )
+            if track_wandb:
+                readable_features = '-'.join(features)
+                wandb.init(
+                    name=f'covnet_{cell}_{readable_features}_{fold}',
+                    entity=f"{wandb_entity}",
+                    project=f"{wandb_project}",
+                )
+                callbacks=[es,lr_schedule,WandbCallback(save_model=False)]
+            else:    
+                callbacks=[es,lr_schedule]
+
             # Train model on dataset
             model.fit(training_generator,
                       validation_data=validation_generator,
                       epochs=n_epochs,
                       verbose=2,
                       use_multiprocessing=False,#started getting errors when set to True...
-                      callbacks=[es,lr_schedule,WandbCallback(save_model=False)]
+                      callbacks=callbacks
                      )
         else:    
             model.fit(training_generator,

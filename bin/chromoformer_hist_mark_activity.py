@@ -88,6 +88,7 @@ with torch.no_grad():
                 exp_label_.append(item['label'].cpu().float().unsqueeze(1).numpy()[0][0])
                 #get hist mark activity
                 activity_.append(item[f'x_p_{pred_resolution}'].cpu().numpy().mean())
+            print(aa)    
 
 #all res kept in order so can just make df and save
 res = pd.DataFrame({"cell":cells_,
