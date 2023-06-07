@@ -1,6 +1,7 @@
 # epi_to_express
 
-Which epigenetic factors are the best predictors of gene expression? An analysis using ROADMAP data.
+Which epigenetic factors are the best predictors of gene expression? An analysis of histone marks using 
+[ROADMAP](https://egg2.wustl.edu/roadmap/web_portal/index.html) data.
 
 [<img src="./epi_to_express.png" width="800" />](./epi_to_express.png)
 
@@ -10,15 +11,19 @@ but none have considered multiple histone marks, the distance of the regulatory 
 cell types. Here we address this issue and investigate the effect each plays on the most informative
 histone marks. See our paper for full details.
 
-## Reproducing results
+## Findings
 
-The results of our work are based on two models a promoter model (epi_to_express - a custom convolutional 
-neural network (CNN)) and a distal model ([chromoformer](https://www.nature.com/articles/s41467-022-34152-5)). 
-We have separate conda enviornments and scripts to run the model training and evaluation for each and have 
-split the repository by model. 
+Here, we present the most comprehensive study of this relationship to date - Investigating seven histone
+marks, in eleven cell types, across a diverse range of cell states and utilising both convolutional and 
+attention-based models to account for histone mark activity at promoter regions up to distal regulatory 
+signals. Our work shows how histone mark function, regulatory distance and cellular states collectively 
+influence histone marks’ relationship with transcription. Moreover, we find no universal histone mark 
+which is consistently the most predictive of expression which highlights the need to consider all three 
+of these factors when determining the effect of histone mark activity on the transcriptional state of a 
+cell.
 
-Roadmap data was used, specifically consolidated ChIP-seq read alignments and RPKM expression valuees for seven 
-major histone marks:
+Roadmap data was used, specifically consolidated ChIP-seq read alignments and RPKM expression values 
+for seven major histone marks:
 
 * H3K4me1
 * H3K4me3
@@ -28,8 +33,18 @@ major histone marks:
 * H3K27ac
 * H3K9ac 
 
-For 11 cell lines and tissue samples. Note that although the scripts and frameworks differ for the two models, 
-the data used is the same across the two models so comparisons across them are valid.
+This was investigated in eleven cell lines and tissue samples. Note that although the scripts and 
+frameworks differ for the two models, the data, training and testing approach used is the same so 
+comparisons across them are valid.
+
+## Reproducing results
+
+The results of our work are based on two models a promoter model (epi_to_express - a custom, convolutional 
+neural network (CNN)) and a distal model, [chromoformer](https://www.nature.com/articles/s41467-022-34152-5),
+transformer-based, DNA interaction-aware deep learning architecture.
+
+We have separate conda enviornments and scripts to run the model training and evaluation for each and have 
+split the repository by model. 
 
 Use the conda environments (yaml files in ./environments) for the steps:
 

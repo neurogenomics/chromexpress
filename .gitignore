@@ -140,6 +140,7 @@ wandb/
 wandb/*
 
 #don't save data
+./Predicting.ipynb
 data/expression/*
 data/dnase/*
 data/atac/*
