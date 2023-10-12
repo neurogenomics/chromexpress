@@ -31,6 +31,7 @@ from torchmetrics.functional import pearson_corrcoef
 from chromoformer.chromoformer.data import Roadmap3D
 #model arch
 from chromoformer.chromoformer.net import Chromoformer
+from chromoformer.chromoformer.util import seed_everything
 
 #params
 pred_resolution = 100
@@ -101,6 +102,9 @@ with torch.no_grad():
             ]
             #loop through folds
             for ind,fold in enumerate([x+1 for x in range(k_fold)]):
+                #set seed
+                seed_everything(101)
+                
                 print(fold)
                 #get fold specific data ----
                 train_genes = qs[(fold + 0) % 4] + qs[(fold + 1) % 4] + qs[(fold + 2) % 4]

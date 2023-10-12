@@ -162,6 +162,8 @@ chromofomer/preprocessing/data
 #model results
 model_results/
 model_results/*
+bin/test_chromoformer_combns_neg.py
+
 
 #don't save chromoformer data
 chromoformer/exp/
@@ -186,4 +188,6 @@ chromoformer/preprocessing/exp/*
 chromoformer/.snakemake/
 chromoformer/*_frag2neighbors.pickle
 chromoformer/*_pair2score.pickle
+
+
 

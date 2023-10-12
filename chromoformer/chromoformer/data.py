@@ -22,7 +22,8 @@ class Roadmap3D(Dataset):
     
     def __init__(self, eid, target_genes, i_max=8, w_prom=40000, w_max=40000,
                  marks = ASSAYS,train_dir=Path('../../preprocessing'),
-                 train_meta=Path('../../preprocessing/train.csv')):
+                 train_meta=Path('../../preprocessing/train.csv'),
+                 return_gene_ids = False):
         super(Roadmap3D, self).__init__()
 
         self.eid = eid
@@ -55,6 +56,7 @@ class Roadmap3D(Dataset):
         self.w_prom = w_prom  # Promoter window size.
         self.w_max = w_max  # Maximum size of pCRE to consider.
         self.marks = marks
+        self.return_gene_ids = return_gene_ids
         
     def _bin_and_pad(self, x, bin_size, max_n_bins):
         """Given a 2D tensor x, make binned tensor by taking average values of `bin_size` consecutive values.
@@ -124,6 +126,10 @@ class Roadmap3D(Dataset):
         item = {}
         item['label'] = self.ensg2label[target_gene]
         item['log2RPKM'] = self.ensg2exp[target_gene]
+        if self.return_gene_ids:
+            #also return gene id
+            #not this is not a tensor**
+            item['gene'] = target_gene
         
         chrom_p, start_p, end_p, strand_p = self.ensg2tss[target_gene]
         start_p, end_p = start_p - 20000, start_p + 20000
@@ -174,7 +180,7 @@ class Roadmap3D(Dataset):
             item[f'interaction_mask_{bin_size}'] = interaction_mask.unsqueeze(0)
         
         item[f'interaction_freq'] = interaction_freq
-
+        
         return item
 
     def __len__(self):

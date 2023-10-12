@@ -31,6 +31,7 @@ from torchmetrics.functional import pearson_corrcoef
 from chromoformer.chromoformer.data import Roadmap3D
 #model arch
 from chromoformer.chromoformer.net import Chromoformer
+from chromoformer.chromoformer.util import seed_everything
 
 #params
 pred_resolution = 100
@@ -116,6 +117,9 @@ with torch.no_grad():
             ]
             #loop through folds
             for ind,fold in enumerate([x+1 for x in range(k_fold)]):
+                #set seed
+                seed_everything(101)
+                
                 print(fold)
                 #get fold specific data ----
                 train_genes = qs[(fold + 0) % 4] + qs[(fold + 1) % 4] + qs[(fold + 2) % 4]
@@ -132,7 +136,8 @@ with torch.no_grad():
                 #----
                 #data loaders ----
                 test_dataset = Roadmap3D(cell_i, test_genes,w_prom=window_size, w_max=window_size,
-                                         marks = assay_i,train_dir=train_dir,train_meta=train_meta)
+                                         marks = assay_i,train_dir=train_dir,train_meta=train_meta,
+                                         return_gene_ids = True)
                 test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, 
                                                           num_workers=8, shuffle=False, drop_last=False)
                 #get model
@@ -149,10 +154,16 @@ with torch.no_grad():
                 model.cuda()
                 model.load_state_dict(torch.load(mod_pth)['net'])
                 model.eval()
-                scores = []
+                act_all = []
+                pred_all = []
+                genes = []
                 for item in test_loader:
                     for k, v in item.items():
-                        item[k] = v.cuda()
+                        #note gene ids aren't tensors
+                        if k=='gene':
+                            item[k] = v
+                        else:
+                            item[k] = v.cuda()
                     #predict
                     out = model(item['x_p_2000'], item['pad_mask_p_2000'], item['x_pcre_2000'], 
                                 item['pad_mask_pcre_2000'], item['interaction_mask_2000'],
@@ -164,15 +175,18 @@ with torch.no_grad():
                     #eval
                     y = item['log2RPKM'].float().unsqueeze(1)
                     evalu = loss_fn(y[:,0], out[:,0])
-                    scores.append(evalu.cpu())
-                #keep all res in a list index is assay-cell
-                scores = [score.numpy() for score in scores]
-                losses.append(pd.DataFrame({"fold":[fold]*len(scores),
-                                            "assay":['-'.join(assay_i)]*len(scores),
-                                            "cell":[cell_i]*len(scores),
-                                            "Pearson_R":scores}))
+                    #append
+                    genes.extend(item['gene'])
+                    act_all.extend(y[:,0].cpu().numpy().tolist())
+                    pred_all.extend(out[:,0].cpu().numpy().tolist())
+                losses.append(pd.DataFrame({"fold":[fold]*len(pred_all),
+                                            "assay":['-'.join(assay_i)]*len(pred_all),
+                                            "cell":[cell_i]*len(pred_all),
+                                            "gene":genes,
+                                            "pred":pred_all,
+                                            "act":act_all}))
                 
 #concat to single dataframe
 losses = pd.concat(losses)
 #save res
-losses.to_csv(f"{PRED_PATH}/chromoformer_combins_blind_test.csv", sep='\t',index=False)        
+losses.to_csv(f"{PRED_PATH}/chromoformer_gene_pred_act_combn.csv", sep='\t',index=False)                

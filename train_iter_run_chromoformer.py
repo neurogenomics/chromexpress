@@ -53,7 +53,7 @@ def get_args():
     parser = argparse.ArgumentParser(description="train")
     parser.add_argument('-c', '--CELL', default='', type=str, help='Cell to train in')
     parser.add_argument('-m', '--MARK', default='', type=str, help='Mark to train on')
-    parser.add_argument('-wdb', '--wandb', default=True, type=bool, 
+    parser.add_argument('-wdb', '--wandb', default=False, type=bool, 
                         help='Whether to track runs with wandb')
     parser.add_argument('-wdb_e', '--wandb_entity', default='', type=str, help='wandb entity')
     parser.add_argument('-wdb_p', '--wandb_project', default='', type=str, help='wandb project')
@@ -80,7 +80,7 @@ track_wandb=args.wandb
 wandb_entity=args.wandb_entity
 wandb_project=args.wandb_project
 
-
+print(track_wandb)
 if track_wandb:
     #track models
     import wandb

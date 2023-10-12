@@ -27,8 +27,22 @@ CELLS = {'E003' : 'H1 cells',
          'E118' : 'HepG2 hepatocellular carcinoma',
          }
 
+CELLS_NAMES = {'E003' : 'H1 ESC',
+               'E004' : 'H1 derived mesendoderm',#ME
+               'E005' : 'H1 derived trophoblast',#TR
+               'E006' : 'H1 derived MSC',
+               'E007' : 'H1 derived NPC',
+               'E016' : 'HUES64 ESC',
+               'E066' : 'Liver',
+               'E087' : 'Pancreatic islets',
+               'E114' : 'Lung carcinoma',
+               'E116' : 'Lymphoblastoid',
+               'E118' : 'Hepatocellular carcinoma',
+              }
+
 SAMPLES=list(CELLS.values())
 SAMPLE_IDS=list(CELLS.keys())
+SAMPLE_NAMES=list(CELLS_NAMES.values())
 
 #hg19 chrom lengths
 CHROM_LEN =np.array([249250621, 243199373, 198022430, 191154276, 180915260, 171115067,
