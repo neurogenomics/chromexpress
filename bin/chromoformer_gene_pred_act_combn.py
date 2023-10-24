@@ -42,7 +42,7 @@ seed = 123
 #regression problem
 y_type = 'log2RPKM'
 #pred in batches
-batch_size = 64
+batch_size = 512
 # window to be considered for the prediction of gene expression
 window_size = 40_000
 

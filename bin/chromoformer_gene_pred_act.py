@@ -42,7 +42,7 @@ seed = 123
 #regression problem
 y_type = 'log2RPKM'
 #pred in batches
-batch_size = 64
+batch_size = 512
 # window to be considered for the prediction of gene expression
 window_size = 40_000
 
@@ -121,14 +121,14 @@ with torch.no_grad():
                 #----
                 #data loaders ----
                 test_dataset = Roadmap3D(cell_i, test_genes,w_prom=window_size, w_max=window_size,
-                                         marks = assay_i,train_dir=train_dir,train_meta=train_meta,
+                                         marks = [assay_i],train_dir=train_dir,train_meta=train_meta,
                                          return_gene_ids = True)
                 test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, 
                                                           num_workers=8, shuffle=False, drop_last=False)
                 #get model
-                mod_pth = f"{MOD_SAVE_PATH}/chromoformer_{cell_i}_{'-'.join(assay_i)}_kfold{fold}"
+                mod_pth = f"{MOD_SAVE_PATH}/chromoformer_{cell_i}_{'-'.join([assay_i])}_kfold{fold}"
                 model = Chromoformer(
-                            n_feats=len(assay_i), embed_n_layers=embed_n_layers, #1 feature input
+                            n_feats=len([assay_i]), embed_n_layers=embed_n_layers, #1 feature input
                             embed_n_heads = embed_n_heads, embed_d_model=embed_d_model, 
                             embed_d_ff=embed_d_ff, pw_int_n_layers=pw_int_n_layers, 
                             pw_int_n_heads=pw_int_n_heads, pw_int_d_model=pw_int_d_model, 
@@ -142,6 +142,7 @@ with torch.no_grad():
                 act_all = []
                 pred_all = []
                 genes = []
+                y_lab = []
                 for item in test_loader:
                     for k, v in item.items():
                         #note gene ids aren't tensors
@@ -162,12 +163,14 @@ with torch.no_grad():
                     evalu = loss_fn(y[:,0], out[:,0])
                     #append
                     genes.extend(item['gene'])
+                    y_lab.extend(item['label'].cpu().numpy().tolist())
                     act_all.extend(y[:,0].cpu().numpy().tolist())
                     pred_all.extend(out[:,0].cpu().numpy().tolist())
                 losses.append(pd.DataFrame({"fold":[fold]*len(pred_all),
-                                            "assay":['-'.join(assay_i)]*len(pred_all),
+                                            "assay":[assay_i]*len(pred_all),
                                             "cell":[cell_i]*len(pred_all),
                                             "gene":genes,
+                                            "label":y_lab,
                                             "pred":pred_all,
                                             "act":act_all}))
                 
