@@ -69,15 +69,18 @@ genes = list(set(meta.gene_id.unique()))
 #go through each group separately
 esc_gene = []
 esc_gene_lab = []
+esc_gene_id = []
 esc_cell = []
 esc_hists = {i:[] for i in features}
 #subset 4 groups
 sub_esc_gene = []
 sub_esc_gene_lab = []
+sub_esc_gene_id = []
 sub_esc_cell = []
 sub_esc_hists = {i:[] for i in features}
 sub_esc_der_gene = []
 sub_esc_der_gene_lab = []
+sub_esc_der_gene_id = []
 sub_esc_der_cell = []
 sub_esc_der_hists = {i:[] for i in features}
 #get activity by fold so it can be compared to performance
@@ -125,20 +128,24 @@ for ind,fold in enumerate([x+1 for x in range(k_fold)]):
                                                 marks = features,y_type=y_type,
                                                 pred_res = pred_resolution,
                                                 shuffle = False,#want order maintained to view all genes
-                                                return_pcres=False)
+                                                return_pcres=False,
+                                                return_gene=True)
         for tss_i in range(len(cells_generators[cell_i])):
             hist_dat_i = cells_generators[cell_i].__getitem__(tss_i)
             #store gene activity - log2-transformed RPKM
             esc_gene.append(hist_dat_i[1]['log2RPKM'][0][0].numpy())
             esc_gene_lab.append(hist_dat_i[1]['label'][0][0].numpy())
+            esc_gene_id.extend(hist_dat_i[0]['gene_ids'])
             esc_cell.append(cell_i)
             if(cell_grp[cell_grp['Epigenome ID (EID)']==cell_i]['cell_anatomy_grp2'].tolist()[0]=='ESC'):
                 sub_esc_gene.append(hist_dat_i[1]['log2RPKM'][0][0].numpy())
                 sub_esc_gene_lab.append(hist_dat_i[1]['label'][0][0].numpy())
+                sub_esc_gene_id.extend(hist_dat_i[0]['gene_ids'])
                 sub_esc_cell.append(cell_i)
             else: #esc deriv
                 sub_esc_der_gene.append(hist_dat_i[1]['log2RPKM'][0][0].numpy())
                 sub_esc_der_gene_lab.append(hist_dat_i[1]['label'][0][0].numpy())
+                sub_esc_der_gene_id.extend(hist_dat_i[0]['gene_ids'])
                 sub_esc_der_cell.append(cell_i)
             #store hist mark activity - mean -log 10 p-val for 6k bp around TSS
             for hist_ind, hist_i in enumerate(features):
@@ -152,6 +159,7 @@ for ind,fold in enumerate([x+1 for x in range(k_fold)]):
     agg_hist_exp_esc = pd.DataFrame.from_dict(esc_hists)
     agg_hist_exp_esc['log2RPKM'] = esc_gene
     agg_hist_exp_esc['label'] = esc_gene_lab
+    agg_hist_exp_esc['gene'] = esc_gene_id
     agg_hist_exp_esc['cell'] = esc_cell
     agg_hist_exp_esc['cell_group'] = 'ESC derived'
     folds_data_esc.append(agg_hist_exp_esc)
@@ -160,12 +168,14 @@ for ind,fold in enumerate([x+1 for x in range(k_fold)]):
     agg_hist_exp_esc = pd.DataFrame.from_dict(sub_esc_hists)
     agg_hist_exp_esc['log2RPKM'] = sub_esc_gene
     agg_hist_exp_esc['label'] = sub_esc_gene_lab
+    agg_hist_exp_esc['gene'] = sub_esc_gene_id
     agg_hist_exp_esc['cell'] = sub_esc_cell
     agg_hist_exp_esc['cell_group'] = 'ESC'
     agg_hist_exp_esc['fold'] = fold
     agg_hist_exp_esc_derv = pd.DataFrame.from_dict(sub_esc_der_hists)
     agg_hist_exp_esc_derv['log2RPKM'] = sub_esc_der_gene
     agg_hist_exp_esc_derv['label'] = sub_esc_der_gene_lab
+    agg_hist_exp_esc_derv['gene'] = sub_esc_der_gene_id
     agg_hist_exp_esc_derv['cell'] = sub_esc_der_cell
     agg_hist_exp_esc_derv['cell_group'] = 'ESC derived'
     agg_hist_exp_esc_derv['fold'] = fold
@@ -175,15 +185,18 @@ for ind,fold in enumerate([x+1 for x in range(k_fold)]):
         
 prim_tiss_gene = []
 prim_tiss_gene_lab = []
+prim_tiss_gene_id = []
 prim_tiss_cell = []
 prim_tiss_hists = {i:[] for i in features}
 #subset 4 groups
 sub_prim_tiss_gene = []
 sub_prim_tiss_gene_lab = []
+sub_prim_tiss_gene_id = []
 sub_prim_tiss_cell = []
 sub_prim_tiss_hists = {i:[] for i in features}
 sub_cncr_gene = []
 sub_cncr_gene_lab = []
+sub_cncr_gene_id = []
 sub_cncr_cell = []
 sub_cncr_hists = {i:[] for i in features}
 
@@ -227,20 +240,24 @@ for ind,fold in enumerate([x+1 for x in range(k_fold)]):
                                                 marks = features,y_type=y_type,
                                                 pred_res = pred_resolution,
                                                 shuffle = False,#want order maintained to view all genes
-                                                return_pcres=False)
+                                                return_pcres=False,
+                                                return_gene=True)
         for tss_i in range(len(cells_generators[cell_i])):
             hist_dat_i = cells_generators[cell_i].__getitem__(tss_i)
             #store gene activity
             prim_tiss_gene.append(hist_dat_i[1]['log2RPKM'][0][0].numpy())
             prim_tiss_gene_lab.append(hist_dat_i[1]['label'][0][0].numpy())
+            prim_tiss_gene_id.extend(hist_dat_i[0]['gene_ids'])
             prim_tiss_cell.append(cell_i)
             if(cell_grp[cell_grp['Epigenome ID (EID)']==cell_i]['cell_anatomy_grp2'].tolist()[0]=='Cancer line'):
                 sub_cncr_gene.append(hist_dat_i[1]['log2RPKM'][0][0].numpy())
                 sub_cncr_gene_lab.append(hist_dat_i[1]['label'][0][0].numpy())
+                sub_cncr_gene_id.extend(hist_dat_i[0]['gene_ids'])
                 sub_cncr_cell.append(cell_i)
             else:#Primary tissue
                 sub_prim_tiss_gene.append(hist_dat_i[1]['log2RPKM'][0][0].numpy())
                 sub_prim_tiss_gene_lab.append(hist_dat_i[1]['label'][0][0].numpy())
+                sub_prim_tiss_gene_id.extend(hist_dat_i[0]['gene_ids'])
                 sub_prim_tiss_cell.append(cell_i)
 
             #store hist mark activity - mean -log 10 p-val for 6k bp around TSS
@@ -254,6 +271,7 @@ for ind,fold in enumerate([x+1 for x in range(k_fold)]):
     agg_hist_exp_prim = pd.DataFrame.from_dict(prim_tiss_hists)
     agg_hist_exp_prim['log2RPKM'] = prim_tiss_gene
     agg_hist_exp_prim['label'] = prim_tiss_gene_lab
+    agg_hist_exp_prim['gene'] = prim_tiss_gene_id
     agg_hist_exp_prim['cell'] = prim_tiss_cell
     agg_hist_exp_prim['cell_group'] = 'Primary tissue'
     agg_hist_exp_prim['fold'] = fold
@@ -263,12 +281,14 @@ for ind,fold in enumerate([x+1 for x in range(k_fold)]):
     agg_hist_exp_prim = pd.DataFrame.from_dict(sub_prim_tiss_hists)
     agg_hist_exp_prim['log2RPKM'] = sub_prim_tiss_gene
     agg_hist_exp_prim['label'] = sub_prim_tiss_gene_lab
+    agg_hist_exp_prim['gene'] = sub_prim_tiss_gene_id
     agg_hist_exp_prim['cell'] = sub_prim_tiss_cell
     agg_hist_exp_prim['cell_group'] = 'Primary tissue'
     agg_hist_exp_prim['fold'] = fold
     agg_hist_exp_cncr = pd.DataFrame.from_dict(sub_cncr_hists)
     agg_hist_exp_cncr['log2RPKM'] = sub_cncr_gene
     agg_hist_exp_cncr['label'] = sub_cncr_gene_lab
+    agg_hist_exp_cncr['gene'] = sub_cncr_gene_id
     agg_hist_exp_cncr['cell'] = sub_cncr_cell
     agg_hist_exp_cncr['cell_group'] = 'Cancer line'
     agg_hist_exp_cncr['fold'] = fold
