@@ -100,7 +100,7 @@ marks and genes not just those in the test set.
 Use `./bin/chromoformer_hist_mark_activity.py`. Note that this will get histone mark activity for all cell types, 
 marks and genes not just those in the test set.
 
-### 4. _In silico_ Mutagenisis analysis
+### 5. _In silico_ Mutagenisis analysis
 
 See `bin/In_silico_mut_chromoformer.py` for the script to analysis the effect on gene expression of degrading activating/repressing histone mark signals at differing distances from the transcriptional start site.
 
