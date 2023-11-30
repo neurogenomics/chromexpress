@@ -128,7 +128,7 @@ class Roadmap3D(Dataset):
         item['log2RPKM'] = self.ensg2exp[target_gene]
         if self.return_gene_ids:
             #also return gene id
-            #not this is not a tensor**
+            #note this is not a tensor**
             item['gene'] = target_gene
         
         chrom_p, start_p, end_p, strand_p = self.ensg2tss[target_gene]
