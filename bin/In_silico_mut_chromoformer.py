@@ -4,6 +4,7 @@
 #* promoter marks (only alter promoter signals) - H3K27ac (active), H3K27me3 (repressive).
 #* distal marks (only alter distal signals) - H3K27ac (active), H3K27me3 (repressive).
 #* Use same mark and alter at diff locations for distal and promoter. More consistent.
+#* Average the predictions where multiple, k fold models makes for more consistent preds (seen in lit for SNP eff preds)
 #* Want a plot of proportion decrease in histone mark activity effect on proportion of expression
 #* Question is it a linear relationship that's predicted? Does this change for promoter vs distal marks? Does this change for distance from TSS?
 #* Question is there any distal histone mark signal changes causing a drastic change in expression? Could rank and then check for enrichment for top 10% in SNPs for a disease relating to the cell type.
@@ -36,7 +37,6 @@ from epi_to_express.constants import (
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchmetrics.functional import pearson_corrcoef
 #data loading imports
 from chromoformer.chromoformer.data import Roadmap3D
 #model arch
@@ -82,16 +82,13 @@ train_meta = train_dir / 'train.csv'
 
 #we want to run h3k27ac at prom and distal for expressed genes
 #and run h3k27me3 at prom and distal for non-expressed genes
-runs = [#['h3k27me3','non-expressed','promoter'],
-        ['h3k27me3','non-expressed','distal'], 
+runs = [['h3k27me3','non-expressed','promoter'],['h3k27me3','non-expressed','distal'], 
         ['h3k27ac','expressed','promoter'],['h3k27ac','expressed','distal']]
 
 #We want to decrease histone mark activity across different proportions
 props = np.round(np.arange(0, 1.1, .1),2)[::-1] 
 
-loss_fn = pearson_corrcoef
 losses = []
-indic = 0
 with torch.no_grad():
     for assay_i, gene_type_i,location_i in runs:
         print(assay_i)
@@ -128,25 +125,17 @@ with torch.no_grad():
                 
                 print(fold)
                 
-                #get fold specific data ----
-                train_genes = qs[(fold + 0) % 4] + qs[(fold + 1) % 4] + qs[(fold + 2) % 4]
-                val_genes = qs[(fold + 3) % 4]
-
-                #split val_genes in two to get validation and test set
-                # train/val split by chrom so do the same for val test
-                val_test_genes = val_genes
-                val_test_chrom = list(set(meta[meta.gene_id.isin(val_test_genes)]['chrom']))
-                val_chrom = val_test_chrom[0:len(val_test_chrom)//2]
-                test_chrom = val_test_chrom[len(val_test_chrom)//2:len(val_test_chrom)]
-                val_genes = meta[meta.gene_id.isin(val_test_genes) & meta.chrom.isin(val_chrom)]['gene_id'].tolist()
-                test_genes = meta[meta.gene_id.isin(val_test_genes) & meta.chrom.isin(test_chrom)]['gene_id'].tolist()
+                #interested in all genes not just test/valid - average the predictions where multiple, k fold models
+                all_genes = qs[(fold + 0) % 4] + qs[(fold + 1) % 4] + qs[(fold + 2) % 4] + qs[(fold + 3) % 4]
+                all_chrom = list(set(meta[meta.gene_id.isin(all_genes)]['chrom']))
+                all_genes = meta[meta.gene_id.isin(all_genes) & meta.chrom.isin(all_chrom)]['gene_id'].tolist()
                 #----
                 #data loaders ----
-                test_dataset = Roadmap3D(cell_i, test_genes,w_prom=window_size, w_max=window_size,
-                                         marks = [assay_i],train_dir=train_dir,train_meta=train_meta,
-                                         return_gene_ids = True)
-                test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, 
-                                                          num_workers=8, shuffle=False, drop_last=False)
+                all_dataset = Roadmap3D(cell_i, all_genes,w_prom=window_size, w_max=window_size,
+                                        marks = [assay_i],train_dir=train_dir,train_meta=train_meta,
+                                        return_gene_ids = True)
+                all_loader = torch.utils.data.DataLoader(all_dataset, batch_size=batch_size, 
+                                                         num_workers=8, shuffle=False, drop_last=False)
                 #get model
                 mod_pth = f"{MOD_SAVE_PATH}/chromoformer_{cell_i}_{'-'.join([assay_i])}_kfold{fold}"
                 model = Chromoformer(
@@ -168,7 +157,8 @@ with torch.no_grad():
                     pred_scores = []
                     pred_genes = []
                     labels = []
-                    for item in test_loader:
+                    mut_pos_all = []
+                    for item in all_loader:
                         for k, v in item.items():
                             #note gene ids aren't tensors
                             if k=='gene':
@@ -203,7 +193,7 @@ with torch.no_grad():
                                 #these contain 40k bp so mutate all but centre 6k (same receptive field as prom model)
                                 #start of gene is centred: start_p, end_p = start_p - 20000, start_p + 20000
                                 recep_field = 6_000
-                                #TODO: mutate chunks of distal histone mark activity in highest res (2k) bins
+                                #Mutate chunks of distal histone mark activity in highest res (2k) bins
                                 #note this will increase batch size
                                 #position important for getting mutation location from gene with distal
                                 mut_pos = []
@@ -243,8 +233,6 @@ with torch.no_grad():
                                                'interaction_freq']:
                                     #diff ones have diff dims
                                     if ('x_pcre' in item_i) or ('interaction_mask' in item_i):
-                                        print(item_i)
-                                        print(item[item_i].shape)
                                         item[item_i] = item[item_i].repeat(((40_000//2_000)-(recep_field//2_000)),1,1,1)
                                     elif item_i =='interaction_freq':
                                         item[item_i] = item[item_i].repeat(((40_000//2_000)-(recep_field//2_000)),1,1)
@@ -263,6 +251,7 @@ with torch.no_grad():
                             pred_scores.extend(out[:,0].cpu().numpy().tolist())
                             pred_genes.extend(item['gene'])
                             labels.extend(item['label'].cpu().numpy().tolist())
+                            mut_pos_all.extend(mut_pos)
                         
                     #keep all res in a list index is assay-cell
                     losses.append(pd.DataFrame({"fold":[fold]*len(pred_scores),
@@ -272,6 +261,7 @@ with torch.no_grad():
                                                 "mut":[location_i]*len(pred_scores),
                                                 "prop":[prop_i]*len(pred_scores),
                                                 "true_gene_exp_label":labels,
+                                                "dist_pos_tss":mut_pos_all,                                                
                                                 "gene":pred_genes,
                                                 "pred_expression":pred_scores}))
                 

@@ -184,10 +184,14 @@ chromoformer/preprocessing/benchmarks
 chromoformer/preprocessing/benchmarks/*
 chromoformer/preprocessing/exp
 chromoformer/preprocessing/exp/*
+chromoformer/preprocessing/mke_dat_no_sm.pbs
+chromoformer/preprocessing/mke_dat_no_sm.sh
+chromoformer/preprocessing/eid.txt
 
 chromoformer/.snakemake/
 chromoformer/*_frag2neighbors.pickle
 chromoformer/*_pair2score.pickle
 
-
+mss_ldsc/
+mss_ldsc/*
 
