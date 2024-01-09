@@ -187,7 +187,8 @@ chromoformer/preprocessing/exp/*
 chromoformer/preprocessing/mke_dat_no_sm.pbs
 chromoformer/preprocessing/mke_dat_no_sm.sh
 chromoformer/preprocessing/eid.txt
-
+chromoformer/preprocessing/.snakemake
+chromoformer/preprocessing/.snakemake/*
 chromoformer/.snakemake/
 chromoformer/*_frag2neighbors.pickle
 chromoformer/*_pair2score.pickle
