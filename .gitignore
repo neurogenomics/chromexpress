@@ -195,4 +195,5 @@ chromoformer/*_pair2score.pickle
 
 mss_ldsc/
 mss_ldsc/*
-
+qtl_ovrlp/
+qtl_ovrlp/*

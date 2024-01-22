@@ -27,8 +27,10 @@ CELLS = {'E003' : 'H1 cells',
          'E118' : 'HepG2 hepatocellular carcinoma',
          }
 
-CELLS_NAMES = {'E003' : 'H1 ESC',
-               'E004' : 'H1 derived mesendoderm',#ME
+CELLS_NAMES = {'E003' : 'H1 ESC', #human embryonic stem cell line
+               #mesoderm = middle layer of the 3 germ layers. Develops during gastrulation in very early development of embryo 
+               'E004' : 'H1 derived mesendoderm',#MR
+               #trophoblast = outer layer of blastocyst provides nutrients to embryo & develops into a large part of placenta
                'E005' : 'H1 derived trophoblast',#TR
                'E006' : 'H1 derived MSC',
                'E007' : 'H1 derived NPC',

@@ -102,6 +102,6 @@ marks and genes not just those in the test set.
 
 ### 5. _In silico_ Mutagenisis analysis
 
-See `./bin/In_silico_mut_chromoformer.py` for the script to analysis the effect on gene expression of degrading activating/repressing histone mark signals at differing distances from the transcriptional start site.
+See `./bin/In_silico_mut_chromoformer.py` for the script to analyse the effect on gene expression of degrading activating/repressing histone mark signals at differing distances from the transcriptional start site.
 
 
