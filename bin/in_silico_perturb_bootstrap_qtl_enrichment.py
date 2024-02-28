@@ -36,7 +36,7 @@ import pandas
 import random
 
 #import constants
-from epi_to_express.constants import (
+from chromexpress.constants import (
     CHROM_LEN, 
     CHROMOSOMES, 
     SAMPLES,
@@ -81,7 +81,7 @@ def bootstrap_neg(df_test,df_eqtl,num_regs,num_poss_regs,num_tests=10_000):
     return(res)
 # --------
 
-#load pred res epi_to_express
+#load pred res chromexpress
 PRED_PATH = pathlib.Path("./model_results/predictions")
 
 #load data if file doesn't exist

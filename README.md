@@ -1,9 +1,9 @@
-# epi_to_express
+# ChromExpress
 
 Which epigenetic factors are the best predictors of gene expression? An analysis of histone marks using 
 [ROADMAP](https://egg2.wustl.edu/roadmap/web_portal/index.html) data.
 
-[<img src="./epi_to_express.png" width="800" />](./epi_to_express.png)
+[<img src="./chromexpress.png" width="800" />](./chromexpress.png)
 
 
 Multiple past approaches have tried to address which histone marks are most predictive of expression
@@ -49,7 +49,7 @@ split the repository by model.
 Use the conda environments (yaml files in ./environments) for the steps:
 
 ```
-conda env create -f ./environments/epi_to_express.yml && \
+conda env create -f ./environments/chromexpress.yml && \
 conda env create -f ./environments/chromoformer.yml && \
 conda activate chromoformer && \
 conda install pytorch==1.9.0 torchvision==0.10.0 torchaudio==0.9.0 torchmetrics=3.0.9 cudatoolkit=11.1 -c pytorch -c conda-forge
@@ -62,7 +62,7 @@ repository (`./chromoformer` folder) to download all data for model training an 
 
 ### 2. train the models
 
-#### epi_to_express
+#### chromexpress
 
 Use `./train_run.py` or `./train_iter_run.py` to train the model for all cell types and histone marks for 4 fold
 cross validation. Just pass in the cell and histone mark to train on.
@@ -75,9 +75,9 @@ histone marks by inputting these as a list.
 
 ### 3. Measure performance
 
-#### epi_to_express
+#### chromexpress
 
-Use `./bin/test_epi_to_express.py` to test the model for all cell types and histone marks for 4 fold
+Use `./bin/test_chromexpress.py` to test the model for all cell types and histone marks for 4 fold
 cross validation.
 
 #### chromoformer
@@ -90,9 +90,9 @@ specifcally for the model trained to predict expression from two histone marks.
 
 We evaluate the histone mark activity in the receptive field of the models. To rerun this analysis use the following:
 
-#### epi_to_express
+#### chromexpress
 
-Use `./bin/epi_to_express_hist_mark_activity.py`. Note that this will get histone mark activity for all cell types, 
+Use `./bin/chromexpress_hist_mark_activity.py`. Note that this will get histone mark activity for all cell types, 
 marks and genes not just those in the test set.
 
 #### chromoformer

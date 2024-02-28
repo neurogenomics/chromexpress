@@ -36,7 +36,7 @@ import pandas
 import random
 
 #import constants
-from epi_to_express.constants import (
+from chromexpress.constants import (
     CHROM_LEN, 
     CHROMOSOMES, 
     SAMPLES,

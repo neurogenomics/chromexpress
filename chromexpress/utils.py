@@ -15,7 +15,7 @@ import pyensembl
 import itertools
 import tensorflow as tf
 
-from epi_to_express.constants import (
+from chromexpress.constants import (
     CELLS,
     ALLOWED_CELLS,
     ALLOWED_FEATURES,
@@ -62,7 +62,7 @@ import pandas as pd
 import numpy as np
 import math
 from pathlib import Path
-from epi_to_express.constants import PROJECT_PATH, ASSAYS
+from chromexpress.constants import PROJECT_PATH, ASSAYS
 train_dir = PROJECT_PATH/'chromoformer'/'preprocessing'
 train_meta = train_dir / 'train.csv'
 
@@ -71,7 +71,7 @@ import pandas as pd
 import numpy as np
 import math
 from pathlib import Path
-from epi_to_express.constants import PROJECT_PATH, ASSAYS
+from chromexpress.constants import PROJECT_PATH, ASSAYS
 train_dir = PROJECT_PATH/'chromoformer'/'preprocessing'
 train_meta = train_dir / 'train.csv'
 

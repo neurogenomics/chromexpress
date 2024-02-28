@@ -1,4 +1,4 @@
-name: epi_to_express
+name: chromexpress
 channels:
   - defaults
   - bioconda

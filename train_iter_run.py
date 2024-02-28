@@ -13,7 +13,7 @@ import itertools
 import os.path
 
 #import constants
-from epi_to_express.constants import (
+from chromexpress.constants import (
     CHROM_LEN, 
     CHROMOSOMES, 
     SAMPLES,
@@ -26,9 +26,9 @@ from epi_to_express.constants import (
 #model imports
 import tensorflow as tf
 #data loading imports
-from epi_to_express.utils import Roadmap3D_tf
-from epi_to_express.model import covnet
-from epi_to_express.utils import pearsonR
+from chromexpress.utils import Roadmap3D_tf
+from chromexpress.model import covnet
+from chromexpress.utils import pearsonR
 #pass inputs
 # argv
 def get_args():
