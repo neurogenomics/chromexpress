@@ -335,7 +335,4 @@ for ind,fold in enumerate([x+1 for x in range(k_fold)]):
             if early_stopping.early_stop:
                 break
             #scheduler.step()
-        #save result after 100 epochs or es
-        print('epoch',epoch)
-        print(aa)
 

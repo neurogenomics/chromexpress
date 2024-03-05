@@ -39,7 +39,7 @@ comparisons across them are valid.
 
 ## Reproducing results
 
-The results of our work are based on two models a promoter model (epi_to_express - a custom, convolutional 
+The results of our work are based on two models a promoter model (ChromExpress - a custom, convolutional 
 neural network (CNN)) and a distal model, [chromoformer](https://www.nature.com/articles/s41467-022-34152-5),
 transformer-based, DNA interaction-aware deep learning architecture.
 
