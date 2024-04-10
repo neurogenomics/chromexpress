@@ -2,6 +2,8 @@
 
 [![DOI](https://zenodo.org/badge/489265649.svg)](https://zenodo.org/doi/10.5281/zenodo.10940542)
 
+If you use this work, please cite our manuscript: [doi](https://doi.org/10.1101/2024.03.29.587323)
+
 Which epigenetic factors are the best predictors of gene expression? An analysis of histone marks using 
 [ROADMAP](https://egg2.wustl.edu/roadmap/web_portal/index.html) data.
 
