@@ -83,7 +83,7 @@ class Roadmap3D_tf(tf.keras.utils.Sequence):
     def __init__(self, cell, target_genes, batch_size, shuffle = True, 
                  i_max=8, w_prom=40_000, w_max=40_000, marks = ASSAYS,
                  pred_res = 100,y_type='log2RPKM',return_pcres=False,
-                 return_gene=False):
+                 return_gene=False,off_centre=None):
         self.eid = cell
         self.target_genes = target_genes # List of ENSGs.
         self.return_gene = return_gene
@@ -110,6 +110,7 @@ class Roadmap3D_tf(tf.keras.utils.Sequence):
         self.i_max = i_max  # Maximum number of cis-interacting pCREs.
         self.w_prom = w_prom  # Promoter window size.
         self.w_max = w_max  # Maximum size of pCRE to consider.
+        self.off_centre = off_centre #proportion of window upstream => 5/6 would be 2.5k of 3k window
         self.marks = marks
         self.pred_res = pred_res
         assert type(self.pred_res)!=list, "Can only handle one pred_res currently not a list"
@@ -150,7 +151,7 @@ class Roadmap3D_tf(tf.keras.utils.Sequence):
         return x_binned, left_pad, n_bins, right_pad
     
     def _get_region_representation(self, chrom, start, end, bin_size, max_n_bins, 
-                                   strand='+', window=None):
+                                   strand='+', window=None,off_centre=None):
         #filter to assays of interest
         marks_ind = [ASSAYS.index(i) for i in self.marks]
         
@@ -159,7 +160,8 @@ class Roadmap3D_tf(tf.keras.utils.Sequence):
                     tf.float32)
         #x = np.load(str(train_dir / f'data/{self.eid}/{chrom}_{start}-{end}.npy'))[marks_ind,:]
         if window is not None:
-            x = x[:, 20000 - window // 2:20000 + window // 2]
+            if off_centre is not None:
+                x = x[:, 20000 - int((window*off_centre)) // 2:20000 + int((window*(1-off_centre))) // 2]
         x, left_pad, n_bins, right_pad = self._bin_and_pad(x, bin_size, max_n_bins)
 
         if strand == '+':
@@ -236,7 +238,9 @@ class Roadmap3D_tf(tf.keras.utils.Sequence):
                                                                                      bin_size, 
                                                                                      max_n_bins, 
                                                                                      strand_p, 
-                                                                                     window=self.w_prom)
+                                                                                     window=self.w_prom,
+                                                                                     off_centre=self.off_centre
+                                                                                    )
             #x_p = tf.expand_dims(tf.transpose(x_p,[1, 0]),axis=0) # 1 x max_n_bins x 7
             x_p = np.expand_dims(np.transpose(x_p,[1, 0]),axis=0) # 1 x max_n_bins x 7
             mask_p = np.ones([1, max_n_bins, max_n_bins], dtype=bool)

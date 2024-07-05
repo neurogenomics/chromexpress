@@ -164,6 +164,9 @@ model_results/
 model_results/*
 bin/test_chromoformer_combns_neg.py
 
+#don't save archR results
+archR_chronmexpress/
+archR_chronmexpress/*
 
 #don't save chromoformer data
 chromoformer/exp/
@@ -192,6 +195,11 @@ chromoformer/preprocessing/.snakemake/*
 chromoformer/.snakemake/
 chromoformer/*_frag2neighbors.pickle
 chromoformer/*_pair2score.pickle
+
+metadata/exon_length.txt.gz
+metadata/mart_export_gene_lens.txt.gz
+train_iter_run_off_centre.py
+bin/test_chromexpress_off_centre.py
 
 mss_ldsc/
 mss_ldsc/*

@@ -1,4 +1,4 @@
-#Check for overlap with fine-mapped QTL data for Hi-C
+#Check for overlap with fine-mapped QTL data
 #To look at if the model predicts regions with known casual genetic variants for phenotypes, 
 #check for overlap with fine-mapped QTLs. Got UK Biobank fine-mapped QTLs from:
 #
@@ -81,69 +81,77 @@ def bootstrap_neg(df_test,df_eqtl,num_regs,num_poss_regs,num_tests=10_000):
     return(res)
 # --------
 
-#need to also get Hi-C data and check if this just captures the enrichment..
-
-hic_relationships = pd.read_csv("./chromoformer/preprocessing/train.csv")
-#not using scores - I guess this is stength of connection
-hic_relationships = hic_relationships[["gene_id","eid","chrom","start","end","neighbors"]]
-
-#get fine-mapped eQTLs
+#load pred res chromexpress
 PRED_PATH = pathlib.Path("./model_results/predictions")
-xl_file = pd.ExcelFile("./qtl_ovrlp/41467_2021_23134_MOESM10_ESM.xlsx")
-dfs = {sheet_name: xl_file.parse(sheet_name) 
-          for sheet_name in xl_file.sheet_names}
-fm_eqtl_tiss = dfs['put_causal_eqtls_tissue_unique']
-#match to cells
-gtex_map = pd.read_csv("./metadata/gtex_roadmap_mapping.csv")
-gtex_map = gtex_map[-pd.isnull(gtex_map['cell_id'])]
-fm_eqtl_tiss_filt = pd.merge(fm_eqtl_tiss,gtex_map,left_on='tissue',right_on='gtex_tissue')
-fm_eqtl_tiss_filt = fm_eqtl_tiss_filt[-pd.isnull(fm_eqtl_tiss_filt['cell_id'])]
-#get gene ids without number extension
-fm_eqtl_tiss_filt['gene_id'] = fm_eqtl_tiss_filt.gene.str.split('.',expand=True)[0]
-#get variant info
-fm_eqtl_tiss_filt[['variant_chr','variant_pos',
-                   'variant_a1','variant_a2']]=fm_eqtl_tiss_filt.variant.str.split(":",expand=True)
-fm_eqtl_tiss_filt["variant_pos"] = pd.to_numeric(fm_eqtl_tiss_filt["variant_pos"])
 
-#split so one row per connection
-hic_relationships
-hic_relationships["neighbors"] = hic_relationships["neighbors"].str.split(";")
-hic_relationships = hic_relationships.explode("neighbors").reset_index(drop=True)
-hic_relationships["neighbor_chrom"] = hic_relationships["neighbors"].str.split(":").str[0]
-hic_relationships["neighbor_start"] = hic_relationships["neighbors"].str.split(":").str[1]
-hic_relationships[["neighbor_start","neighbor_end"]] = hic_relationships["neighbor_start"].str.split("-", 
-                                                                                                     expand=True)
-#make sure hi-c on same chrom, in chrom 1-22 and upstream
-hic_relationships = hic_relationships[hic_relationships['chrom']==hic_relationships['neighbor_chrom']]
-hic_relationships = hic_relationships[hic_relationships['chrom'].isin(["chr"+str(i) for i in range(1,23)])]
-hic_relationships['neighbor_start'] = hic_relationships['neighbor_start'].astype(int)
-hic_relationships['neighbor_end'] = hic_relationships['neighbor_end'].astype(int)
-hic_relationships = hic_relationships[hic_relationships['neighbor_start']<hic_relationships['start']]
-#filter to just the cells to be tested
-hic_relationships = hic_relationships[hic_relationships['eid'].isin(set(fm_eqtl_tiss_filt['cell_id']))]
-#split into 2k bins to match
-hic_relationships['neighbor_length'] = hic_relationships['neighbor_end'] - hic_relationships['neighbor_start']
-hic_relationships['neighbor_num_2k'] = hic_relationships['neighbor_length']//2_000
-hic_relationships['neighbor_num_2k_count'] = 1
-hic_relationships = hic_relationships.reset_index(drop=True)
-#repeat rows
-hic_relationships = hic_relationships.loc[hic_relationships.index.repeat(hic_relationships['neighbor_num_2k'])]
-#group by index with transform for date ranges
-hic_relationships['neighbor_num_2k_inst'] =(hic_relationships.groupby(level=0)['neighbor_num_2k_count']
-                                            .transform(lambda x: range(len(x))))
-#unique default index
-hic_relationships = hic_relationships.reset_index(drop=True)
-#correct start and end
-hic_relationships['corr_neighbor_start'] = hic_relationships['neighbor_start']+2_000*hic_relationships['neighbor_num_2k_inst']
-hic_relationships['corr_neighbor_end'] = hic_relationships['neighbor_start']+2_000*(hic_relationships['neighbor_num_2k_inst']+1)
-hic_relationships
-#keep regions between 6k and 20k upstream to match analysis
-hic_relationships = hic_relationships[(hic_relationships['corr_neighbor_end']+6_000<=hic_relationships['start']) & (
-    hic_relationships['corr_neighbor_start']>=hic_relationships['start']-20_000)]
-#need to match to the same genes and cell types as used in pred bootstrap tests
-#----------------------------------------
+#load data if file doesn't exist
 mut_dat_file = f"{PRED_PATH}/chromoformer_in_silico_mut.csv"
-mut_dat = pd.read_csv(mut_dat_file)
+from pathlib import Path
+if Path(mut_dat_file).is_file():
+    mut_dat = pd.read_csv(mut_dat_file)
+else:    
+    mut_dat = []
+    for samp_i in SAMPLE_IDS:
+        # 4 runs saved separately
+        for ind in range(0,4):
+            # 4 folds
+            for fold_i in range(0,4):
+                mut_dat.append(pd.read_csv(f"{PRED_PATH}/{samp_i}_{ind}_fold{fold_i}_chromoformer_in_silico_mut.csv", 
+                                           sep='\t'))
+    #concat
+    mut_dat = pd.concat(mut_dat)
+    #add in 'nice' cell type names
+    mut_dat['cell_name']='Unknown'
+
+    for key, name in CELLS_NAMES.items():
+        mut_dat.loc[mut_dat['cell'] == key, 'cell_name'] = name    
+
+    #update true_gene_exp_label (some are lists)    
+    mut_dat['true_gene_exp_label'] = np.where(mut_dat['true_gene_exp_label'] == '[1]','1',mut_dat['true_gene_exp_label'])
+    mut_dat['true_gene_exp_label'] = np.where(mut_dat['true_gene_exp_label'] == '[0]','0',mut_dat['true_gene_exp_label'])
+    #also some are numeric
+    mut_dat['true_gene_exp_label'] = mut_dat['true_gene_exp_label'].apply(str)
+
+    # add dist to TSS of mutation
+    mut_dat['dist_tss'] = np.where(mut_dat['mut']=='promoter',0,np.where(mut_dat['dist_pos_tss']<=7, # 0-7
+                                                                         ((40_000//2)-((mut_dat['dist_pos_tss'])*2_000))*-1,
+                                                                         #>7 (11-19)
+                                                                         (mut_dat['dist_pos_tss']-9)*2_000
+                                                                        )
+                                  )
+
+    #add in cell groups
+    rm_meta = pd.read_csv(str(PROJECT_PATH/'metadata/roadmap_metadata.csv'))
+    mut_dat = pd.merge(mut_dat, rm_meta[["Epigenome ID (EID)", "ANATOMY"]], left_on='cell',
+                       right_on="Epigenome ID (EID)", how="left")
+    mut_dat['cell_anatomy_grp'] = np.where(mut_dat['ANATOMY'].isin(['ESC']),
+                                           'ESC',np.where(mut_dat['ANATOMY'].isin(['ESC_DERIVED']),'ESC derived',
+                                                          np.where(mut_dat['cell'].isin(['E118','E114']),
+                                                                   'Cancer line','Primary tissue')))
+
+    #write to single file
+    mut_dat.to_csv(mut_dat_file, index=False)
+# ---- to get correlation plot between different model folds
+#checked, all genes have 4 predictions
+#sorted_exp = []
+#for fold_i in range(1,5):
+#    df_i = mut_dat.loc[mut_dat['fold']==fold_i].copy()
+#    df_i.sort_values(by=['assay','cell','gene_type','mut','prop','true_gene_exp_label',
+#                         'dist_pos_tss','gene','cell_name','dist_tss','Epigenome ID (EID)','ANATOMY',
+#                         'cell_anatomy_grp'],inplace=True)
+#    sorted_exp.append(df_i.pred_expression)
+
+#pred_vals = pd.DataFrame({"fold1":list(sorted_exp[0]),
+#                          "fold2":list(sorted_exp[1]),
+#                          "fold3":list(sorted_exp[2]),
+#                          "fold4":list(sorted_exp[3])})    
+#
+#del df_i,sorted_exp
+
+#corr_fold_pred_vals = pred_vals.corr()
+#for plot - PROJECT_PATH/"model_results"/"plots"/"corr_folds_in_silco_perturb.pdf"
+# -----
+
 #average the effects from multiple models
 mut_dat_avg = mut_dat.groupby(['assay','cell','gene_type','mut','prop','true_gene_exp_label',
                                'dist_pos_tss','gene','cell_name','dist_tss','Epigenome ID (EID)',
@@ -173,6 +181,22 @@ mut_dist_dat_exp['abs_pred_expression_delta'] = mut_dist_dat_exp['pred_expressio
 upstr_mut_dist_dat_exp = mut_dist_dat_exp[mut_dist_dat_exp['dist_tss']<0]#, #-6k and back i.e. distal reg not prom or gene body
 #unneeded
 del mut_dist_dat,mut_dist_dat_exp
+
+xl_file = pd.ExcelFile("./qtl_ovrlp/41467_2021_23134_MOESM10_ESM.xlsx")
+dfs = {sheet_name: xl_file.parse(sheet_name) 
+          for sheet_name in xl_file.sheet_names}
+fm_eqtl_tiss = dfs['put_causal_eqtls_tissue_unique']
+#match to cells
+gtex_map = pd.read_csv("./metadata/gtex_roadmap_mapping.csv")
+gtex_map = gtex_map[-pd.isnull(gtex_map['cell_id'])]
+fm_eqtl_tiss_filt = pd.merge(fm_eqtl_tiss,gtex_map,left_on='tissue',right_on='gtex_tissue')
+fm_eqtl_tiss_filt = fm_eqtl_tiss_filt[-pd.isnull(fm_eqtl_tiss_filt['cell_id'])]
+#get gene ids without number extension
+fm_eqtl_tiss_filt['gene_id'] = fm_eqtl_tiss_filt.gene.str.split('.',expand=True)[0]
+#get variant info
+fm_eqtl_tiss_filt[['variant_chr','variant_pos',
+                   'variant_a1','variant_a2']]=fm_eqtl_tiss_filt.variant.str.split(":",expand=True)
+fm_eqtl_tiss_filt["variant_pos"] = pd.to_numeric(fm_eqtl_tiss_filt["variant_pos"])
 #get start bp (TSS) and chrom from metadata
 meta = pd.read_csv('./chromoformer/preprocessing/train.csv')[['gene_id','eid','chrom','start','end']]
 upstr_mut_dist_dat_exp = pd.merge(upstr_mut_dist_dat_exp,meta,left_on=['cell','gene'], right_on=['eid','gene_id'])
@@ -185,30 +209,23 @@ upstr_mut_dist_dat_exp = upstr_mut_dist_dat_exp[upstr_mut_dist_dat_exp['mut_reg_
 upstr_mut_dist_dat_exp_gtex = upstr_mut_dist_dat_exp[upstr_mut_dist_dat_exp['cell'].isin(set(gtex_map.cell_id))]
 #join on tissue from gtex
 upstr_mut_dist_dat_exp_gtex = pd.merge(upstr_mut_dist_dat_exp,gtex_map,left_on='cell',right_on='cell_id')
+
+#Now we want to use distance as the metric rather than pred change
+#what perf do we get for that?
+
 #get deciles for each tissue
-upstr_mut_dist_dat_exp_gtex['quantiles'] = upstr_mut_dist_dat_exp_gtex.groupby(['gtex_tissue'])['pred_expression_delta'].transform(
-    lambda x: pd.qcut(x, 10, labels=range(1,11)))
-#----------------------------------------
-#also use this set to get neg controls - i.e. all possible regions upstream in 2k bins
-#filt the hi-c
-hic_relationships['cell_gene']=hic_relationships['eid']+hic_relationships['gene_id']
-upstr_mut_dist_dat_exp_gtex['cell_gene']=upstr_mut_dist_dat_exp_gtex['cell']+upstr_mut_dist_dat_exp_gtex['gene']
-hic_relationships = hic_relationships[hic_relationships['cell_gene'].isin(upstr_mut_dist_dat_exp_gtex['cell_gene'])]
-#rename cols to make it align 
-hic_relationships.rename(columns={'eid':'cell'}, inplace=True)
-hic_relationships.rename(columns={'gene_id':'gene'}, inplace=True)
-#8616 Hi-C 2k bin interactions remaining for all testing cell types
-#now check for enrichment of the eQTL sets in these and compare to the model's top decile
-
-
-#loop through each cell and compare to all peaks with bootstrapping
+#base deciles on distance rather than pred change
+#use dist_pos_tss 0= promoter and already equal num of each of 0 - 7 in dist_pos_tss
+#using 6k bp upstream to capture dist_pos_tss 0
 num_tests = 10_000
+#loop through each cell and compare to all peaks with bootstrapping
 p_vals = []
 tiss_tested = []
 all_num_tested = []
 cell_tested = set(gtex_map.cell_id)
 #remove E118 as two cells link to liver, will add for this cell test
 cell_tested.remove('E118')
+
 random.seed(101)
 for cell_i in cell_tested:
     print("Cell: ",cell_i)
@@ -218,20 +235,15 @@ for cell_i in cell_tested:
     tiss_tested.append(tiss_i)
     #get cell dat
     exp_gtex_cell_i = upstr_mut_dist_dat_exp_gtex.copy()
-    #get hic
-    hic_relationships_cell_i = hic_relationships.copy()
     if cell_i=='E066':
         #add in other cell
         exp_gtex_cell_i = exp_gtex_cell_i[(exp_gtex_cell_i['cell']==cell_i)|(
             exp_gtex_cell_i['cell']=='E118')]
         fm_eqtl_tiss_filt_cell_i = fm_eqtl_tiss_filt[(fm_eqtl_tiss_filt['cell_id']==cell_i)|(
             fm_eqtl_tiss_filt['cell_id']=='E118')]
-        hic_relationships_cell_i = hic_relationships_cell_i[(hic_relationships_cell_i['cell']==cell_i)|(
-            hic_relationships_cell_i['cell']=='E118')]
     else:
         exp_gtex_cell_i = exp_gtex_cell_i[exp_gtex_cell_i['cell']==cell_i]
         fm_eqtl_tiss_filt_cell_i = fm_eqtl_tiss_filt[fm_eqtl_tiss_filt['cell_id']==cell_i]
-        hic_relationships_cell_i = hic_relationships_cell_i[hic_relationships_cell_i['cell']==cell_i]
     #get total num of possible
     #join on gene, then filter to where region matches
     exp_gtex_cell_i_poss = pd.merge(exp_gtex_cell_i,fm_eqtl_tiss_filt_cell_i,
@@ -239,16 +251,25 @@ for cell_i in cell_tested:
     #filt reg match
     num_poss_eqtl = exp_gtex_cell_i_poss[(exp_gtex_cell_i_poss['variant_pos'] >= exp_gtex_cell_i_poss['mut_reg_start'])&(
         exp_gtex_cell_i_poss['variant_pos'] <=exp_gtex_cell_i_poss['mut_reg_end'] )].shape[0]
-    #get top - just all hic
-    cell_i_top = hic_relationships_cell_i
-    num_tested = cell_i_top.shape[0]
+    #get quant i
+    exp_gtex_cell_i_top = exp_gtex_cell_i[(exp_gtex_cell_i['dist_tss']>=-6000)][['gene','cell_name',
+                                                                                 'cell_anatomy_grp',
+                                                                                 'pred_expression_orig',
+                                                                                 'pred_expression',
+                                                                                 'pred_expression_delta',
+                                                                                 'dist_pos_tss',
+                                                                                 'mut_reg_chrom',
+                                                                                 'mut_reg_start',
+                                                                                 'mut_reg_end']]
+    num_tested = exp_gtex_cell_i_top.shape[0]
     all_num_tested.append(num_tested)
     #join on gene, then filter to where region matches
-    cell_i_top = pd.merge(cell_i_top,fm_eqtl_tiss_filt_cell_i,left_on='gene',right_on='gene_id')
+    exp_gtex_cell_i_top = pd.merge(exp_gtex_cell_i_top,fm_eqtl_tiss_filt_cell_i,
+                                   left_on='gene',right_on='gene_id')
     #filt reg match
-    cell_i_top = cell_i_top[(cell_i_top['variant_pos'] >= cell_i_top['neighbor_start']) & (
-        cell_i_top['variant_pos'] <=cell_i_top['neighbor_end'] )]
-    num_top_eqtl = cell_i_top.shape[0]
+    exp_gtex_cell_i_top = exp_gtex_cell_i_top[(exp_gtex_cell_i_top['variant_pos'] >= exp_gtex_cell_i_top['mut_reg_start']) & (
+        exp_gtex_cell_i_top['variant_pos'] <=exp_gtex_cell_i_top['mut_reg_end'] )]
+    num_top_eqtl = exp_gtex_cell_i_top.shape[0]
     top_prop = num_top_eqtl/num_poss_eqtl
     #compare against all randomly sampled ones (bootstraping)
     neg_bs_res = bootstrap_neg(df_test=exp_gtex_cell_i,df_eqtl=fm_eqtl_tiss_filt_cell_i,
@@ -272,11 +293,11 @@ quant_i = 1
 
 p_adjust = list(stats.p_adjust(FloatVector(p_vals), method = 'BH'))    
 
-bst_hic_res = pd.DataFrame({"quantile":[quant_i] * len(p_vals),
+bst_dist_res = pd.DataFrame({"quantile":[quant_i] * len(p_vals),
                             "cell":list(cell_tested),
                             "tissue":tiss_tested,
                             "tissue_nice":tiss_tested_n,
                             "num_positions_tested":all_num_tested,
                             "p_value":p_vals,
                             "FDR_p":p_adjust})
-bst_hic_res.to_csv("./qtl_ovrlp/all_quant_bootstrap_hi_c_res.csv",index=False)
+bst_dist_res.to_csv("./qtl_ovrlp/all_quant_bootstrap_dist_res.csv",index=False)

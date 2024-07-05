@@ -81,11 +81,25 @@ def bootstrap_neg(df_test,df_eqtl,num_regs,num_poss_regs,num_tests=10_000):
     return(res)
 # --------
 
-#need to also get Hi-C data and check if this just captures the enrichment..
-
-hic_relationships = pd.read_csv("./chromoformer/preprocessing/train.csv")
-#not using scores - I guess this is stength of connection
-hic_relationships = hic_relationships[["gene_id","eid","chrom","start","end","neighbors"]]
+#need to also get hist activity and check if max activity just captures the enrichment..
+hist_act = pd.read_csv('./model_results/checkpoints/h3k27ac_40k_hist_act.csv', sep='\t')
+#we want just 20k upstream - 100 bp averaging
+meta_hist_act_dat = hist_act.iloc[:,400:]
+hist_act_upstr = pd.concat([hist_act.iloc[:,:(20_000//100)],meta_hist_act_dat], axis=1)
+#also average activity to 2k to match hi-C and in silico mut
+arr = np.array(hist_act_upstr.iloc[:,:200])
+tmp = []
+for x in range(0, arr.shape[1], 20):
+    averaged = arr[:, x:x+20].mean(axis=1)
+    tmp.append(averaged) 
+arr_avg = np.column_stack(tmp)
+hist_act_upstr = pd.concat([pd.DataFrame(arr_avg),meta_hist_act_dat], axis=1)
+#go long instead of wide to get a row per pos
+hist_act_upstr = pd.melt(hist_act_upstr, id_vars=['log2RPKM','label','gene','cell'], 
+                         value_vars=[i for i in range(0,10)])
+#get top 2k bin of activity per gene/cell
+hist_act_upstr = hist_act_upstr.sort_values(['cell','gene','value'],ascending=False)
+hist_act_upstr_top = hist_act_upstr.groupby(['cell','gene']).head(1).reset_index(drop=True)
 
 #get fine-mapped eQTLs
 PRED_PATH = pathlib.Path("./model_results/predictions")
@@ -105,41 +119,6 @@ fm_eqtl_tiss_filt[['variant_chr','variant_pos',
                    'variant_a1','variant_a2']]=fm_eqtl_tiss_filt.variant.str.split(":",expand=True)
 fm_eqtl_tiss_filt["variant_pos"] = pd.to_numeric(fm_eqtl_tiss_filt["variant_pos"])
 
-#split so one row per connection
-hic_relationships
-hic_relationships["neighbors"] = hic_relationships["neighbors"].str.split(";")
-hic_relationships = hic_relationships.explode("neighbors").reset_index(drop=True)
-hic_relationships["neighbor_chrom"] = hic_relationships["neighbors"].str.split(":").str[0]
-hic_relationships["neighbor_start"] = hic_relationships["neighbors"].str.split(":").str[1]
-hic_relationships[["neighbor_start","neighbor_end"]] = hic_relationships["neighbor_start"].str.split("-", 
-                                                                                                     expand=True)
-#make sure hi-c on same chrom, in chrom 1-22 and upstream
-hic_relationships = hic_relationships[hic_relationships['chrom']==hic_relationships['neighbor_chrom']]
-hic_relationships = hic_relationships[hic_relationships['chrom'].isin(["chr"+str(i) for i in range(1,23)])]
-hic_relationships['neighbor_start'] = hic_relationships['neighbor_start'].astype(int)
-hic_relationships['neighbor_end'] = hic_relationships['neighbor_end'].astype(int)
-hic_relationships = hic_relationships[hic_relationships['neighbor_start']<hic_relationships['start']]
-#filter to just the cells to be tested
-hic_relationships = hic_relationships[hic_relationships['eid'].isin(set(fm_eqtl_tiss_filt['cell_id']))]
-#split into 2k bins to match
-hic_relationships['neighbor_length'] = hic_relationships['neighbor_end'] - hic_relationships['neighbor_start']
-hic_relationships['neighbor_num_2k'] = hic_relationships['neighbor_length']//2_000
-hic_relationships['neighbor_num_2k_count'] = 1
-hic_relationships = hic_relationships.reset_index(drop=True)
-#repeat rows
-hic_relationships = hic_relationships.loc[hic_relationships.index.repeat(hic_relationships['neighbor_num_2k'])]
-#group by index with transform for date ranges
-hic_relationships['neighbor_num_2k_inst'] =(hic_relationships.groupby(level=0)['neighbor_num_2k_count']
-                                            .transform(lambda x: range(len(x))))
-#unique default index
-hic_relationships = hic_relationships.reset_index(drop=True)
-#correct start and end
-hic_relationships['corr_neighbor_start'] = hic_relationships['neighbor_start']+2_000*hic_relationships['neighbor_num_2k_inst']
-hic_relationships['corr_neighbor_end'] = hic_relationships['neighbor_start']+2_000*(hic_relationships['neighbor_num_2k_inst']+1)
-hic_relationships
-#keep regions between 6k and 20k upstream to match analysis
-hic_relationships = hic_relationships[(hic_relationships['corr_neighbor_end']+6_000<=hic_relationships['start']) & (
-    hic_relationships['corr_neighbor_start']>=hic_relationships['start']-20_000)]
 #need to match to the same genes and cell types as used in pred bootstrap tests
 #----------------------------------------
 mut_dat_file = f"{PRED_PATH}/chromoformer_in_silico_mut.csv"
@@ -189,15 +168,13 @@ upstr_mut_dist_dat_exp_gtex = pd.merge(upstr_mut_dist_dat_exp,gtex_map,left_on='
 upstr_mut_dist_dat_exp_gtex['quantiles'] = upstr_mut_dist_dat_exp_gtex.groupby(['gtex_tissue'])['pred_expression_delta'].transform(
     lambda x: pd.qcut(x, 10, labels=range(1,11)))
 #----------------------------------------
+
 #also use this set to get neg controls - i.e. all possible regions upstream in 2k bins
 #filt the hi-c
-hic_relationships['cell_gene']=hic_relationships['eid']+hic_relationships['gene_id']
+hist_act_upstr_top['cell_gene']=hist_act_upstr_top['cell']+hist_act_upstr_top['gene']
 upstr_mut_dist_dat_exp_gtex['cell_gene']=upstr_mut_dist_dat_exp_gtex['cell']+upstr_mut_dist_dat_exp_gtex['gene']
-hic_relationships = hic_relationships[hic_relationships['cell_gene'].isin(upstr_mut_dist_dat_exp_gtex['cell_gene'])]
-#rename cols to make it align 
-hic_relationships.rename(columns={'eid':'cell'}, inplace=True)
-hic_relationships.rename(columns={'gene_id':'gene'}, inplace=True)
-#8616 Hi-C 2k bin interactions remaining for all testing cell types
+hist_act_upstr_top = hist_act_upstr_top[hist_act_upstr_top['cell_gene'].isin(upstr_mut_dist_dat_exp_gtex['cell_gene'])]
+#54907 rows of 1 2k bin per gene remaining for all testing cell types
 #now check for enrichment of the eQTL sets in these and compare to the model's top decile
 
 
@@ -219,19 +196,19 @@ for cell_i in cell_tested:
     #get cell dat
     exp_gtex_cell_i = upstr_mut_dist_dat_exp_gtex.copy()
     #get hic
-    hic_relationships_cell_i = hic_relationships.copy()
+    hist_act_upstr_top_cell_i = hist_act_upstr_top.copy()
     if cell_i=='E066':
         #add in other cell
         exp_gtex_cell_i = exp_gtex_cell_i[(exp_gtex_cell_i['cell']==cell_i)|(
             exp_gtex_cell_i['cell']=='E118')]
         fm_eqtl_tiss_filt_cell_i = fm_eqtl_tiss_filt[(fm_eqtl_tiss_filt['cell_id']==cell_i)|(
             fm_eqtl_tiss_filt['cell_id']=='E118')]
-        hic_relationships_cell_i = hic_relationships_cell_i[(hic_relationships_cell_i['cell']==cell_i)|(
-            hic_relationships_cell_i['cell']=='E118')]
+        hist_act_upstr_top_cell_i = hist_act_upstr_top_cell_i[(hist_act_upstr_top_cell_i['cell']==cell_i)|(
+            hist_act_upstr_top_cell_i['cell']=='E118')]
     else:
         exp_gtex_cell_i = exp_gtex_cell_i[exp_gtex_cell_i['cell']==cell_i]
         fm_eqtl_tiss_filt_cell_i = fm_eqtl_tiss_filt[fm_eqtl_tiss_filt['cell_id']==cell_i]
-        hic_relationships_cell_i = hic_relationships_cell_i[hic_relationships_cell_i['cell']==cell_i]
+        hist_act_upstr_top_cell_i = hist_act_upstr_top_cell_i[hist_act_upstr_top_cell_i['cell']==cell_i]
     #get total num of possible
     #join on gene, then filter to where region matches
     exp_gtex_cell_i_poss = pd.merge(exp_gtex_cell_i,fm_eqtl_tiss_filt_cell_i,
@@ -240,14 +217,21 @@ for cell_i in cell_tested:
     num_poss_eqtl = exp_gtex_cell_i_poss[(exp_gtex_cell_i_poss['variant_pos'] >= exp_gtex_cell_i_poss['mut_reg_start'])&(
         exp_gtex_cell_i_poss['variant_pos'] <=exp_gtex_cell_i_poss['mut_reg_end'] )].shape[0]
     #get top - just all hic
-    cell_i_top = hic_relationships_cell_i
+    cell_i_top = hist_act_upstr_top_cell_i
     num_tested = cell_i_top.shape[0]
     all_num_tested.append(num_tested)
     #join on gene, then filter to where region matches
     cell_i_top = pd.merge(cell_i_top,fm_eqtl_tiss_filt_cell_i,left_on='gene',right_on='gene_id')
+    #get gene start pos to work out pos of activity
+    gene_pos = exp_gtex_cell_i[['gene','start','end']].drop_duplicates().reset_index(False)
+    #join to data
+    cell_i_top = pd.merge(cell_i_top,gene_pos,left_on='gene_x',right_on='gene',how='left')
+    #get act pos of hist activity (2k bp bins)
+    cell_i_top['hist_act_strt'] = cell_i_top['start']-((cell_i_top['variable']+1)*2_000)
+    cell_i_top['hist_act_end'] = cell_i_top['start']-(cell_i_top['variable']*2_000)
     #filt reg match
-    cell_i_top = cell_i_top[(cell_i_top['variant_pos'] >= cell_i_top['neighbor_start']) & (
-        cell_i_top['variant_pos'] <=cell_i_top['neighbor_end'] )]
+    cell_i_top = cell_i_top[(cell_i_top['variant_pos'] >= cell_i_top['hist_act_strt']) & (
+        cell_i_top['variant_pos'] <=cell_i_top['hist_act_end'] )]
     num_top_eqtl = cell_i_top.shape[0]
     top_prop = num_top_eqtl/num_poss_eqtl
     #compare against all randomly sampled ones (bootstraping)
@@ -272,11 +256,11 @@ quant_i = 1
 
 p_adjust = list(stats.p_adjust(FloatVector(p_vals), method = 'BH'))    
 
-bst_hic_res = pd.DataFrame({"quantile":[quant_i] * len(p_vals),
+bst_act_res = pd.DataFrame({"quantile":[quant_i] * len(p_vals),
                             "cell":list(cell_tested),
                             "tissue":tiss_tested,
                             "tissue_nice":tiss_tested_n,
                             "num_positions_tested":all_num_tested,
                             "p_value":p_vals,
                             "FDR_p":p_adjust})
-bst_hic_res.to_csv("./qtl_ovrlp/all_quant_bootstrap_hi_c_res.csv",index=False)
+bst_act_res.to_csv("./qtl_ovrlp/all_quant_bootstrap_hist_act_res.csv",index=False)
