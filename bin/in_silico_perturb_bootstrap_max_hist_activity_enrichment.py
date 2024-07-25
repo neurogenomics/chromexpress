@@ -84,6 +84,7 @@ def bootstrap_neg(df_test,df_eqtl,num_regs,num_poss_regs,num_tests=10_000):
 #need to also get hist activity and check if max activity just captures the enrichment..
 hist_act = pd.read_csv('./model_results/checkpoints/h3k27ac_40k_hist_act.csv', sep='\t')
 #we want just 20k upstream - 100 bp averaging
+#forward and reverse strand already dealt with in data loader
 meta_hist_act_dat = hist_act.iloc[:,400:]
 hist_act_upstr = pd.concat([hist_act.iloc[:,:(20_000//100)],meta_hist_act_dat], axis=1)
 #also average activity to 2k to match hi-C and in silico mut
@@ -100,6 +101,28 @@ hist_act_upstr = pd.melt(hist_act_upstr, id_vars=['log2RPKM','label','gene','cel
 #get top 2k bin of activity per gene/cell
 hist_act_upstr = hist_act_upstr.sort_values(['cell','gene','value'],ascending=False)
 hist_act_upstr_top = hist_act_upstr.groupby(['cell','gene']).head(1).reset_index(drop=True)
+
+#we also want top downstream - 100 bp averaging
+#forward and reverse strand already dealt with in data loader
+meta_hist_act_dat = hist_act.iloc[:,400:]
+hist_act_dwnstr = pd.concat([hist_act.iloc[:,(20_000//100):],meta_hist_act_dat], axis=1)
+#also average activity to 2k to match hi-C and in silico mut
+arr = np.array(hist_act_dwnstr.iloc[:,:200])
+tmp = []
+for x in range(0, arr.shape[1], 20):
+    averaged = arr[:, x:x+20].mean(axis=1)
+    tmp.append(averaged) 
+arr_avg = np.column_stack(tmp)
+hist_act_dwnstr = pd.concat([pd.DataFrame(arr_avg),meta_hist_act_dat], axis=1)
+#go long instead of wide to get a row per pos
+hist_act_dwnstr = pd.melt(hist_act_dwnstr, id_vars=['log2RPKM','label','gene','cell'], 
+                         value_vars=[i for i in range(0,10)])
+#get top 2k bin of activity per gene/cell
+hist_act_dwnstr = hist_act_dwnstr.sort_values(['cell','gene','value'],ascending=False)
+hist_act_dwnstr_top = hist_act_dwnstr.groupby(['cell','gene']).head(1).reset_index(drop=True)
+
+#join up and downstream
+hist_act_upstr_top = pd.concat([hist_act_upstr_top,hist_act_dwnstr_top])
 
 #get fine-mapped eQTLs
 PRED_PATH = pathlib.Path("./model_results/predictions")
@@ -145,20 +168,68 @@ del mut_dat,mut_dat_avg,no_mut_dist_dat
 
 #separate out unexp and exp models - going with just exp - active model (h3k27ac) as in silico perturb seems more sensible
 mut_dist_dat_exp = mut_dist_dat[mut_dist_dat['true_gene_exp_label']==1]
+del mut_dist_dat
 mut_dist_dat_exp['pred_expression_delta']=(mut_dist_dat_exp['pred_expression_orig'] - mut_dist_dat_exp['pred_expression'])/mut_dist_dat_exp['pred_expression']
 mut_dist_dat_exp['abs_pred_expression_delta'] = mut_dist_dat_exp['pred_expression_delta'].abs()
+
 #concentrate on upstream since downstream likely gene body
 #only chr 1-22 not sex chr
-upstr_mut_dist_dat_exp = mut_dist_dat_exp[mut_dist_dat_exp['dist_tss']<0]#, #-6k and back i.e. distal reg not prom or gene body
+upstr_mut_dist_dat_exp = mut_dist_dat_exp[(mut_dist_dat_exp['dist_tss']<0)]#, #<=-6k i.e. distal reg not prom
+dwnstr_mut_dist_dat_exp = mut_dist_dat_exp[(mut_dist_dat_exp['dist_tss']>0)]#, #>=4k+ i.e. distal reg not prom
 #unneeded
-del mut_dist_dat,mut_dist_dat_exp
+del mut_dist_dat_exp
+
+xl_file = pd.ExcelFile("./qtl_ovrlp/41467_2021_23134_MOESM10_ESM.xlsx")
+dfs = {sheet_name: xl_file.parse(sheet_name) 
+          for sheet_name in xl_file.sheet_names}
+fm_eqtl_tiss = dfs['put_causal_eqtls_tissue_unique']
+#match to cells
+gtex_map = pd.read_csv("./metadata/gtex_roadmap_mapping.csv")
+gtex_map = gtex_map[-pd.isnull(gtex_map['cell_id'])]
+fm_eqtl_tiss_filt = pd.merge(fm_eqtl_tiss,gtex_map,left_on='tissue',right_on='gtex_tissue')
+fm_eqtl_tiss_filt = fm_eqtl_tiss_filt[-pd.isnull(fm_eqtl_tiss_filt['cell_id'])]
+#get gene ids without number extension
+fm_eqtl_tiss_filt['gene_id'] = fm_eqtl_tiss_filt.gene.str.split('.',expand=True)[0]
+#get variant info
+fm_eqtl_tiss_filt[['variant_chr','variant_pos',
+                   'variant_a1','variant_a2']]=fm_eqtl_tiss_filt.variant.str.split(":",expand=True)
+fm_eqtl_tiss_filt["variant_pos"] = pd.to_numeric(fm_eqtl_tiss_filt["variant_pos"])
 #get start bp (TSS) and chrom from metadata
-meta = pd.read_csv('./chromoformer/preprocessing/train.csv')[['gene_id','eid','chrom','start','end']]
+meta = pd.read_csv('./chromoformer/preprocessing/train.csv')[['gene_id','eid','chrom','start','end','strand']]
 upstr_mut_dist_dat_exp = pd.merge(upstr_mut_dist_dat_exp,meta,left_on=['cell','gene'], right_on=['eid','gene_id'])
-#calc mut reg
+dwnstr_mut_dist_dat_exp = pd.merge(dwnstr_mut_dist_dat_exp,meta,left_on=['cell','gene'], right_on=['eid','gene_id'])
+
+#calc mut reg - note this is strand specific!!!!
 upstr_mut_dist_dat_exp['mut_reg_chrom']=upstr_mut_dist_dat_exp['chrom']
-upstr_mut_dist_dat_exp['mut_reg_start']=upstr_mut_dist_dat_exp['start']+upstr_mut_dist_dat_exp['dist_tss']
-upstr_mut_dist_dat_exp['mut_reg_end']=upstr_mut_dist_dat_exp['start']+upstr_mut_dist_dat_exp['dist_tss']+2_000
+dwnstr_mut_dist_dat_exp['mut_reg_chrom']=dwnstr_mut_dist_dat_exp['chrom']
+
+#deal with forward strand
+#Rember dist_tss is a minus number
+upstr_mut_dist_dat_exp.loc[upstr_mut_dist_dat_exp.strand=='+', 
+                           'mut_reg_start']=upstr_mut_dist_dat_exp['start']+upstr_mut_dist_dat_exp['dist_tss']
+upstr_mut_dist_dat_exp.loc[upstr_mut_dist_dat_exp.strand=='+',
+                           'mut_reg_end']=upstr_mut_dist_dat_exp['start']+upstr_mut_dist_dat_exp['dist_tss']+2_000
+dwnstr_mut_dist_dat_exp.loc[dwnstr_mut_dist_dat_exp.strand=='+', 
+                           'mut_reg_start']=dwnstr_mut_dist_dat_exp['start']+dwnstr_mut_dist_dat_exp['dist_tss']
+dwnstr_mut_dist_dat_exp.loc[dwnstr_mut_dist_dat_exp.strand=='+',
+                           'mut_reg_end']=dwnstr_mut_dist_dat_exp['start']+dwnstr_mut_dist_dat_exp['dist_tss']+2_000
+
+#now deal with reverse strand
+#mut_reg_start is act upper boundary just revrsed since rev strand
+upstr_mut_dist_dat_exp.loc[upstr_mut_dist_dat_exp.strand=='-', 
+                           'mut_reg_start']=upstr_mut_dist_dat_exp['start']+(
+    upstr_mut_dist_dat_exp['dist_tss']*-1)-2_000
+upstr_mut_dist_dat_exp.loc[upstr_mut_dist_dat_exp.strand=='-',
+                           'mut_reg_end']=upstr_mut_dist_dat_exp['start']+(
+    upstr_mut_dist_dat_exp['dist_tss']*-1)
+dwnstr_mut_dist_dat_exp.loc[dwnstr_mut_dist_dat_exp.strand=='-', 
+                           'mut_reg_start']=dwnstr_mut_dist_dat_exp['start']+(
+    dwnstr_mut_dist_dat_exp['dist_tss']*-1)-2_000
+dwnstr_mut_dist_dat_exp.loc[dwnstr_mut_dist_dat_exp.strand=='-',
+                           'mut_reg_end']=dwnstr_mut_dist_dat_exp['start']+(
+    dwnstr_mut_dist_dat_exp['dist_tss']*-1)
+
+#
 upstr_mut_dist_dat_exp = upstr_mut_dist_dat_exp[upstr_mut_dist_dat_exp['mut_reg_chrom'].isin(
     ['chr'+str(s) for s in list(range(1,23))])]
 upstr_mut_dist_dat_exp_gtex = upstr_mut_dist_dat_exp[upstr_mut_dist_dat_exp['cell'].isin(set(gtex_map.cell_id))]
@@ -167,16 +238,31 @@ upstr_mut_dist_dat_exp_gtex = pd.merge(upstr_mut_dist_dat_exp,gtex_map,left_on='
 #get deciles for each tissue
 upstr_mut_dist_dat_exp_gtex['quantiles'] = upstr_mut_dist_dat_exp_gtex.groupby(['gtex_tissue'])['pred_expression_delta'].transform(
     lambda x: pd.qcut(x, 10, labels=range(1,11)))
+dwnstr_mut_dist_dat_exp = dwnstr_mut_dist_dat_exp[dwnstr_mut_dist_dat_exp['mut_reg_chrom'].isin(
+    ['chr'+str(s) for s in list(range(1,23))])]
+dwnstr_mut_dist_dat_exp_gtex = dwnstr_mut_dist_dat_exp[dwnstr_mut_dist_dat_exp['cell'].isin(set(gtex_map.cell_id))]
+#join on tissue from gtex
+dwnstr_mut_dist_dat_exp_gtex = pd.merge(dwnstr_mut_dist_dat_exp,gtex_map,left_on='cell',right_on='cell_id')
+#get deciles for each tissue
+dwnstr_mut_dist_dat_exp_gtex['quantiles'] = dwnstr_mut_dist_dat_exp_gtex.groupby(['gtex_tissue'])['pred_expression_delta'].transform(
+    lambda x: pd.qcut(x, 10, labels=range(1,11)))
+#
+#join up and dwn and tss
+upstr_mut_dist_dat_exp_gtex = pd.concat([upstr_mut_dist_dat_exp_gtex,
+                                         dwnstr_mut_dist_dat_exp_gtex,])
 #----------------------------------------
 
 #also use this set to get neg controls - i.e. all possible regions upstream in 2k bins
 #filt the hi-c
 hist_act_upstr_top['cell_gene']=hist_act_upstr_top['cell']+hist_act_upstr_top['gene']
 upstr_mut_dist_dat_exp_gtex['cell_gene']=upstr_mut_dist_dat_exp_gtex['cell']+upstr_mut_dist_dat_exp_gtex['gene']
-hist_act_upstr_top = hist_act_upstr_top[hist_act_upstr_top['cell_gene'].isin(upstr_mut_dist_dat_exp_gtex['cell_gene'])]
+#hist_act_upstr_top = hist_act_upstr_top[hist_act_upstr_top['cell_gene'].isin(upstr_mut_dist_dat_exp_gtex['cell_gene'])]
+#get strand from metadata
+strnd_df = pd.read_csv('./chromoformer/preprocessing/train.csv')[['gene_id','strand']].drop_duplicates()
+strnd_df.rename(columns={'gene_id':'gene'}, inplace=True)
+hist_act_upstr_top = hist_act_upstr_top.merge(strnd_df,on='gene')
 #54907 rows of 1 2k bin per gene remaining for all testing cell types
 #now check for enrichment of the eQTL sets in these and compare to the model's top decile
-
 
 #loop through each cell and compare to all peaks with bootstrapping
 num_tests = 10_000
@@ -227,8 +313,11 @@ for cell_i in cell_tested:
     #join to data
     cell_i_top = pd.merge(cell_i_top,gene_pos,left_on='gene_x',right_on='gene',how='left')
     #get act pos of hist activity (2k bp bins)
-    cell_i_top['hist_act_strt'] = cell_i_top['start']-((cell_i_top['variable']+1)*2_000)
-    cell_i_top['hist_act_end'] = cell_i_top['start']-(cell_i_top['variable']*2_000)
+    #need to do so based on strand
+    cell_i_top.loc[cell_i_top['strand']=='+','hist_act_strt'] = cell_i_top['start']-((cell_i_top['variable']+1)*2_000)
+    cell_i_top.loc[cell_i_top['strand']=='+','hist_act_end'] = cell_i_top['start']-(cell_i_top['variable']*2_000)
+    cell_i_top.loc[cell_i_top['strand']=='-','hist_act_end'] = cell_i_top['start']+((cell_i_top['variable']+1)*2_000)
+    cell_i_top.loc[cell_i_top['strand']=='-','hist_act_strt'] = cell_i_top['start']+(cell_i_top['variable']*2_000) 
     #filt reg match
     cell_i_top = cell_i_top[(cell_i_top['variant_pos'] >= cell_i_top['hist_act_strt']) & (
         cell_i_top['variant_pos'] <=cell_i_top['hist_act_end'] )]
@@ -247,14 +336,18 @@ for cell_i in cell_tested:
 tiss_tested_n = ['Cerebellum & Hippocampus' if x=='Brain_Cerebellum, Brain_Hippocampus' else x for x in tiss_tested]
 tiss_tested_n = ['Lymphocytes' if x=='Cells_EBV-transformed_lymphocytes' else x for x in tiss_tested_n]
 
-from rpy2.robjects.packages import importr
-from rpy2.robjects.vectors import FloatVector
-
-stats = importr('stats')
+def p_adjust_bh(p):
+    """Benjamini-Hochberg p-value correction for multiple hypothesis testing."""
+    p = np.asfarray(p)
+    by_descend = p.argsort()[::-1]
+    by_orig = by_descend.argsort()
+    steps = float(len(p)) / np.arange(len(p), 0, -1)
+    q = np.minimum(1, np.minimum.accumulate(steps * p[by_descend]))
+    return q[by_orig]
 
 quant_i = 1
 
-p_adjust = list(stats.p_adjust(FloatVector(p_vals), method = 'BH'))    
+p_adjust = list(p_adjust_bh(p_vals))    
 
 bst_act_res = pd.DataFrame({"quantile":[quant_i] * len(p_vals),
                             "cell":list(cell_tested),

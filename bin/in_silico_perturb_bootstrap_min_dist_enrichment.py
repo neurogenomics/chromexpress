@@ -152,6 +152,7 @@ else:
 #for plot - PROJECT_PATH/"model_results"/"plots"/"corr_folds_in_silco_perturb.pdf"
 # -----
 
+
 #average the effects from multiple models
 mut_dat_avg = mut_dat.groupby(['assay','cell','gene_type','mut','prop','true_gene_exp_label',
                                'dist_pos_tss','gene','cell_name','dist_tss','Epigenome ID (EID)',
@@ -174,13 +175,18 @@ del mut_dat,mut_dat_avg,no_mut_dist_dat
 
 #separate out unexp and exp models - going with just exp - active model (h3k27ac) as in silico perturb seems more sensible
 mut_dist_dat_exp = mut_dist_dat[mut_dist_dat['true_gene_exp_label']==1]
+del mut_dist_dat
 mut_dist_dat_exp['pred_expression_delta']=(mut_dist_dat_exp['pred_expression_orig'] - mut_dist_dat_exp['pred_expression'])/mut_dist_dat_exp['pred_expression']
 mut_dist_dat_exp['abs_pred_expression_delta'] = mut_dist_dat_exp['pred_expression_delta'].abs()
+
+
+
 #concentrate on upstream since downstream likely gene body
 #only chr 1-22 not sex chr
-upstr_mut_dist_dat_exp = mut_dist_dat_exp[mut_dist_dat_exp['dist_tss']<0]#, #-6k and back i.e. distal reg not prom or gene body
+upstr_mut_dist_dat_exp = mut_dist_dat_exp[(mut_dist_dat_exp['dist_tss']<0)]#, #<=-6k i.e. distal reg not prom
+dwnstr_mut_dist_dat_exp = mut_dist_dat_exp[(mut_dist_dat_exp['dist_tss']>0)]#, #>=4k+ i.e. distal reg not prom
 #unneeded
-del mut_dist_dat,mut_dist_dat_exp
+del mut_dist_dat_exp
 
 xl_file = pd.ExcelFile("./qtl_ovrlp/41467_2021_23134_MOESM10_ESM.xlsx")
 dfs = {sheet_name: xl_file.parse(sheet_name) 
@@ -198,17 +204,61 @@ fm_eqtl_tiss_filt[['variant_chr','variant_pos',
                    'variant_a1','variant_a2']]=fm_eqtl_tiss_filt.variant.str.split(":",expand=True)
 fm_eqtl_tiss_filt["variant_pos"] = pd.to_numeric(fm_eqtl_tiss_filt["variant_pos"])
 #get start bp (TSS) and chrom from metadata
-meta = pd.read_csv('./chromoformer/preprocessing/train.csv')[['gene_id','eid','chrom','start','end']]
+meta = pd.read_csv('./chromoformer/preprocessing/train.csv')[['gene_id','eid','chrom','start','end','strand']]
 upstr_mut_dist_dat_exp = pd.merge(upstr_mut_dist_dat_exp,meta,left_on=['cell','gene'], right_on=['eid','gene_id'])
-#calc mut reg
+dwnstr_mut_dist_dat_exp = pd.merge(dwnstr_mut_dist_dat_exp,meta,left_on=['cell','gene'], right_on=['eid','gene_id'])
+
+#calc mut reg - note this is strand specific!!!!
 upstr_mut_dist_dat_exp['mut_reg_chrom']=upstr_mut_dist_dat_exp['chrom']
-upstr_mut_dist_dat_exp['mut_reg_start']=upstr_mut_dist_dat_exp['start']+upstr_mut_dist_dat_exp['dist_tss']
-upstr_mut_dist_dat_exp['mut_reg_end']=upstr_mut_dist_dat_exp['start']+upstr_mut_dist_dat_exp['dist_tss']+2_000
+dwnstr_mut_dist_dat_exp['mut_reg_chrom']=dwnstr_mut_dist_dat_exp['chrom']
+
+#deal with forward strand
+#Rember dist_tss is a minus number
+upstr_mut_dist_dat_exp.loc[upstr_mut_dist_dat_exp.strand=='+', 
+                           'mut_reg_start']=upstr_mut_dist_dat_exp['start']+upstr_mut_dist_dat_exp['dist_tss']
+upstr_mut_dist_dat_exp.loc[upstr_mut_dist_dat_exp.strand=='+',
+                           'mut_reg_end']=upstr_mut_dist_dat_exp['start']+upstr_mut_dist_dat_exp['dist_tss']+2_000
+dwnstr_mut_dist_dat_exp.loc[dwnstr_mut_dist_dat_exp.strand=='+', 
+                           'mut_reg_start']=dwnstr_mut_dist_dat_exp['start']+dwnstr_mut_dist_dat_exp['dist_tss']
+dwnstr_mut_dist_dat_exp.loc[dwnstr_mut_dist_dat_exp.strand=='+',
+                           'mut_reg_end']=dwnstr_mut_dist_dat_exp['start']+dwnstr_mut_dist_dat_exp['dist_tss']+2_000
+
+#now deal with reverse strand
+#mut_reg_start is act upper boundary just revrsed since rev strand
+upstr_mut_dist_dat_exp.loc[upstr_mut_dist_dat_exp.strand=='-', 
+                           'mut_reg_start']=upstr_mut_dist_dat_exp['start']+(
+    upstr_mut_dist_dat_exp['dist_tss']*-1)-2_000
+upstr_mut_dist_dat_exp.loc[upstr_mut_dist_dat_exp.strand=='-',
+                           'mut_reg_end']=upstr_mut_dist_dat_exp['start']+(
+    upstr_mut_dist_dat_exp['dist_tss']*-1)
+dwnstr_mut_dist_dat_exp.loc[dwnstr_mut_dist_dat_exp.strand=='-', 
+                           'mut_reg_start']=dwnstr_mut_dist_dat_exp['start']+(
+    dwnstr_mut_dist_dat_exp['dist_tss']*-1)-2_000
+dwnstr_mut_dist_dat_exp.loc[dwnstr_mut_dist_dat_exp.strand=='-',
+                           'mut_reg_end']=dwnstr_mut_dist_dat_exp['start']+(
+    dwnstr_mut_dist_dat_exp['dist_tss']*-1)
+
+#
 upstr_mut_dist_dat_exp = upstr_mut_dist_dat_exp[upstr_mut_dist_dat_exp['mut_reg_chrom'].isin(
     ['chr'+str(s) for s in list(range(1,23))])]
 upstr_mut_dist_dat_exp_gtex = upstr_mut_dist_dat_exp[upstr_mut_dist_dat_exp['cell'].isin(set(gtex_map.cell_id))]
 #join on tissue from gtex
 upstr_mut_dist_dat_exp_gtex = pd.merge(upstr_mut_dist_dat_exp,gtex_map,left_on='cell',right_on='cell_id')
+#get deciles for each tissue
+upstr_mut_dist_dat_exp_gtex['quantiles'] = upstr_mut_dist_dat_exp_gtex.groupby(['gtex_tissue'])['pred_expression_delta'].transform(
+    lambda x: pd.qcut(x, 10, labels=range(1,11)))
+dwnstr_mut_dist_dat_exp = dwnstr_mut_dist_dat_exp[dwnstr_mut_dist_dat_exp['mut_reg_chrom'].isin(
+    ['chr'+str(s) for s in list(range(1,23))])]
+dwnstr_mut_dist_dat_exp_gtex = dwnstr_mut_dist_dat_exp[dwnstr_mut_dist_dat_exp['cell'].isin(set(gtex_map.cell_id))]
+#join on tissue from gtex
+dwnstr_mut_dist_dat_exp_gtex = pd.merge(dwnstr_mut_dist_dat_exp,gtex_map,left_on='cell',right_on='cell_id')
+#get deciles for each tissue
+dwnstr_mut_dist_dat_exp_gtex['quantiles'] = dwnstr_mut_dist_dat_exp_gtex.groupby(['gtex_tissue'])['pred_expression_delta'].transform(
+    lambda x: pd.qcut(x, 10, labels=range(1,11)))
+#
+#join up and dwn and tss
+upstr_mut_dist_dat_exp_gtex = pd.concat([upstr_mut_dist_dat_exp_gtex,
+                                         dwnstr_mut_dist_dat_exp_gtex,])
 
 #Now we want to use distance as the metric rather than pred change
 #what perf do we get for that?
@@ -251,16 +301,18 @@ for cell_i in cell_tested:
     #filt reg match
     num_poss_eqtl = exp_gtex_cell_i_poss[(exp_gtex_cell_i_poss['variant_pos'] >= exp_gtex_cell_i_poss['mut_reg_start'])&(
         exp_gtex_cell_i_poss['variant_pos'] <=exp_gtex_cell_i_poss['mut_reg_end'] )].shape[0]
-    #get quant i
-    exp_gtex_cell_i_top = exp_gtex_cell_i[(exp_gtex_cell_i['dist_tss']>=-6000)][['gene','cell_name',
-                                                                                 'cell_anatomy_grp',
-                                                                                 'pred_expression_orig',
-                                                                                 'pred_expression',
-                                                                                 'pred_expression_delta',
-                                                                                 'dist_pos_tss',
-                                                                                 'mut_reg_chrom',
-                                                                                 'mut_reg_start',
-                                                                                 'mut_reg_end']]
+    #get closest distance
+    #note this is already strand-specific
+    exp_gtex_cell_i_top = exp_gtex_cell_i[(exp_gtex_cell_i['dist_tss']==-6000)|((
+        exp_gtex_cell_i['dist_tss']>=4000)&(exp_gtex_cell_i['dist_tss']<=6000))][['gene','cell_name',
+                                               'cell_anatomy_grp',
+                                               'pred_expression_orig',
+                                               'pred_expression',
+                                               'pred_expression_delta',
+                                               'dist_pos_tss',
+                                               'mut_reg_chrom',
+                                               'mut_reg_start',
+                                               'mut_reg_end']]
     num_tested = exp_gtex_cell_i_top.shape[0]
     all_num_tested.append(num_tested)
     #join on gene, then filter to where region matches
@@ -271,27 +323,35 @@ for cell_i in cell_tested:
         exp_gtex_cell_i_top['variant_pos'] <=exp_gtex_cell_i_top['mut_reg_end'] )]
     num_top_eqtl = exp_gtex_cell_i_top.shape[0]
     top_prop = num_top_eqtl/num_poss_eqtl
+    print("top_prop",top_prop) 
     #compare against all randomly sampled ones (bootstraping)
     neg_bs_res = bootstrap_neg(df_test=exp_gtex_cell_i,df_eqtl=fm_eqtl_tiss_filt_cell_i,
                                num_regs=num_tested,num_poss_regs=num_poss_eqtl,
                                num_tests=num_tests)
+    print("mean neg",np.mean(np.array(neg_bs_res)))
+    print("median neg",np.median(np.array(neg_bs_res)))
     #To get a p like value(called probability): 
     #count all background with greater proportion than top list. 
     p_val = np.sum(top_prop<np.array(neg_bs_res))/num_tests
+    print("p_val",p_val)
     p_vals.append(p_val)
 
 #nice naming 
 tiss_tested_n = ['Cerebellum & Hippocampus' if x=='Brain_Cerebellum, Brain_Hippocampus' else x for x in tiss_tested]
 tiss_tested_n = ['Lymphocytes' if x=='Cells_EBV-transformed_lymphocytes' else x for x in tiss_tested_n]
 
-from rpy2.robjects.packages import importr
-from rpy2.robjects.vectors import FloatVector
-
-stats = importr('stats')
+def p_adjust_bh(p):
+    """Benjamini-Hochberg p-value correction for multiple hypothesis testing."""
+    p = np.asfarray(p)
+    by_descend = p.argsort()[::-1]
+    by_orig = by_descend.argsort()
+    steps = float(len(p)) / np.arange(len(p), 0, -1)
+    q = np.minimum(1, np.minimum.accumulate(steps * p[by_descend]))
+    return q[by_orig]
 
 quant_i = 1
 
-p_adjust = list(stats.p_adjust(FloatVector(p_vals), method = 'BH'))    
+p_adjust = list(p_adjust_bh(p_vals))
 
 bst_dist_res = pd.DataFrame({"quantile":[quant_i] * len(p_vals),
                             "cell":list(cell_tested),

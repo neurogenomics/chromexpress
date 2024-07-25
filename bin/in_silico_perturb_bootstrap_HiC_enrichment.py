@@ -105,8 +105,8 @@ fm_eqtl_tiss_filt[['variant_chr','variant_pos',
                    'variant_a1','variant_a2']]=fm_eqtl_tiss_filt.variant.str.split(":",expand=True)
 fm_eqtl_tiss_filt["variant_pos"] = pd.to_numeric(fm_eqtl_tiss_filt["variant_pos"])
 
+
 #split so one row per connection
-hic_relationships
 hic_relationships["neighbors"] = hic_relationships["neighbors"].str.split(";")
 hic_relationships = hic_relationships.explode("neighbors").reset_index(drop=True)
 hic_relationships["neighbor_chrom"] = hic_relationships["neighbors"].str.split(":").str[0]
@@ -118,12 +118,17 @@ hic_relationships = hic_relationships[hic_relationships['chrom']==hic_relationsh
 hic_relationships = hic_relationships[hic_relationships['chrom'].isin(["chr"+str(i) for i in range(1,23)])]
 hic_relationships['neighbor_start'] = hic_relationships['neighbor_start'].astype(int)
 hic_relationships['neighbor_end'] = hic_relationships['neighbor_end'].astype(int)
-hic_relationships = hic_relationships[hic_relationships['neighbor_start']<hic_relationships['start']]
+#get strand from metadata
+strnd_df = pd.read_csv('./chromoformer/preprocessing/train.csv')[['gene_id','strand']].drop_duplicates()
+hic_relationships = hic_relationships.merge(strnd_df,on='gene_id')
+#makre sure upstream for positive strand, downstream for negative
+hic_relationships = hic_relationships[((hic_relationships['neighbor_start']<hic_relationships['start'])&(hic_relationships['strand']=='+'))|(
+    (hic_relationships['neighbor_start']>hic_relationships['start'])&(hic_relationships['strand']=='-'))]
 #filter to just the cells to be tested
 hic_relationships = hic_relationships[hic_relationships['eid'].isin(set(fm_eqtl_tiss_filt['cell_id']))]
-#split into 2k bins to match
+#split into 2k bins to match pred qtl analysis
 hic_relationships['neighbor_length'] = hic_relationships['neighbor_end'] - hic_relationships['neighbor_start']
-hic_relationships['neighbor_num_2k'] = hic_relationships['neighbor_length']//2_000
+hic_relationships['neighbor_num_2k'] = (hic_relationships['neighbor_length']//2_000)+1
 hic_relationships['neighbor_num_2k_count'] = 1
 hic_relationships = hic_relationships.reset_index(drop=True)
 #repeat rows
@@ -134,12 +139,17 @@ hic_relationships['neighbor_num_2k_inst'] =(hic_relationships.groupby(level=0)['
 #unique default index
 hic_relationships = hic_relationships.reset_index(drop=True)
 #correct start and end
-hic_relationships['corr_neighbor_start'] = hic_relationships['neighbor_start']+2_000*hic_relationships['neighbor_num_2k_inst']
-hic_relationships['corr_neighbor_end'] = hic_relationships['neighbor_start']+2_000*(hic_relationships['neighbor_num_2k_inst']+1)
-hic_relationships
-#keep regions between 6k and 20k upstream to match analysis
-hic_relationships = hic_relationships[(hic_relationships['corr_neighbor_end']+6_000<=hic_relationships['start']) & (
-    hic_relationships['corr_neighbor_start']>=hic_relationships['start']-20_000)]
+hic_relationships['corr_neighbor_start'] = hic_relationships['neighbor_start']+(2_000*hic_relationships['neighbor_num_2k_inst'])
+hic_relationships['corr_neighbor_end'] = hic_relationships['neighbor_start']+(2_000*(hic_relationships['neighbor_num_2k_inst']+1))
+#keep regions between 6k and 20k upstream or 4k to 20k downstream to match analysis
+hic_relationships = hic_relationships[(
+    (hic_relationships['corr_neighbor_start']+6_000<=hic_relationships['start']) & (
+        hic_relationships['corr_neighbor_end']>=hic_relationships['start']-20_000)&(
+            hic_relationships['strand']=='+'))|(
+           (hic_relationships['corr_neighbor_end']-4_000>=hic_relationships['end']) & (
+        hic_relationships['corr_neighbor_start']<=hic_relationships['end']+20_000)&(
+           hic_relationships['strand']=='-') 
+        )]
 #need to match to the same genes and cell types as used in pred bootstrap tests
 #----------------------------------------
 mut_dat_file = f"{PRED_PATH}/chromoformer_in_silico_mut.csv"
@@ -148,7 +158,7 @@ mut_dat = pd.read_csv(mut_dat_file)
 mut_dat_avg = mut_dat.groupby(['assay','cell','gene_type','mut','prop','true_gene_exp_label',
                                'dist_pos_tss','gene','cell_name','dist_tss','Epigenome ID (EID)',
                                'ANATOMY','cell_anatomy_grp'])['pred_expression'].mean().reset_index(name='pred_expression')
-#interested in just where hsit mark was completely removed
+#interested in just where hist mark was completely removed
 mut_dist_dat = mut_dat_avg[mut_dat_avg['prop']==0]
 #join on dat with no mutation to get orig exp prediction
 no_mut_dist_dat = mut_dat_avg[mut_dat_avg['prop']==1.0]
@@ -166,20 +176,48 @@ del mut_dat,mut_dat_avg,no_mut_dist_dat
 
 #separate out unexp and exp models - going with just exp - active model (h3k27ac) as in silico perturb seems more sensible
 mut_dist_dat_exp = mut_dist_dat[mut_dist_dat['true_gene_exp_label']==1]
+del mut_dist_dat
 mut_dist_dat_exp['pred_expression_delta']=(mut_dist_dat_exp['pred_expression_orig'] - mut_dist_dat_exp['pred_expression'])/mut_dist_dat_exp['pred_expression']
 mut_dist_dat_exp['abs_pred_expression_delta'] = mut_dist_dat_exp['pred_expression_delta'].abs()
-#concentrate on upstream since downstream likely gene body
+#concentrate on upstream and downstream not TSS
 #only chr 1-22 not sex chr
-upstr_mut_dist_dat_exp = mut_dist_dat_exp[mut_dist_dat_exp['dist_tss']<0]#, #-6k and back i.e. distal reg not prom or gene body
+upstr_mut_dist_dat_exp = mut_dist_dat_exp[(mut_dist_dat_exp['dist_tss']<0)]#, #<=-6k i.e. distal reg not prom
+dwnstr_mut_dist_dat_exp = mut_dist_dat_exp[(mut_dist_dat_exp['dist_tss']>0)]#, #>=4k+ i.e. distal reg not prom
 #unneeded
-del mut_dist_dat,mut_dist_dat_exp
+del mut_dist_dat_exp
 #get start bp (TSS) and chrom from metadata
-meta = pd.read_csv('./chromoformer/preprocessing/train.csv')[['gene_id','eid','chrom','start','end']]
+meta = pd.read_csv('./chromoformer/preprocessing/train.csv')[['gene_id','eid','chrom','start','end','strand']]
 upstr_mut_dist_dat_exp = pd.merge(upstr_mut_dist_dat_exp,meta,left_on=['cell','gene'], right_on=['eid','gene_id'])
-#calc mut reg
+dwnstr_mut_dist_dat_exp = pd.merge(dwnstr_mut_dist_dat_exp,meta,left_on=['cell','gene'], right_on=['eid','gene_id'])
+#calc mut reg - note this is strand specific!!!!
 upstr_mut_dist_dat_exp['mut_reg_chrom']=upstr_mut_dist_dat_exp['chrom']
-upstr_mut_dist_dat_exp['mut_reg_start']=upstr_mut_dist_dat_exp['start']+upstr_mut_dist_dat_exp['dist_tss']
-upstr_mut_dist_dat_exp['mut_reg_end']=upstr_mut_dist_dat_exp['start']+upstr_mut_dist_dat_exp['dist_tss']+2_000
+dwnstr_mut_dist_dat_exp['mut_reg_chrom']=dwnstr_mut_dist_dat_exp['chrom']
+#deal with forward strand
+#Rember dist_tss is a minus number
+upstr_mut_dist_dat_exp.loc[upstr_mut_dist_dat_exp.strand=='+', 
+                           'mut_reg_start']=upstr_mut_dist_dat_exp['start']+upstr_mut_dist_dat_exp['dist_tss']
+upstr_mut_dist_dat_exp.loc[upstr_mut_dist_dat_exp.strand=='+',
+                           'mut_reg_end']=upstr_mut_dist_dat_exp['start']+upstr_mut_dist_dat_exp['dist_tss']+2_000
+dwnstr_mut_dist_dat_exp.loc[dwnstr_mut_dist_dat_exp.strand=='+', 
+                           'mut_reg_start']=dwnstr_mut_dist_dat_exp['start']+dwnstr_mut_dist_dat_exp['dist_tss']
+dwnstr_mut_dist_dat_exp.loc[dwnstr_mut_dist_dat_exp.strand=='+',
+                           'mut_reg_end']=dwnstr_mut_dist_dat_exp['start']+dwnstr_mut_dist_dat_exp['dist_tss']+2_000
+#now deal with reverse strand
+#mut_reg_start is act upper boundary just revrsed since rev strand
+upstr_mut_dist_dat_exp.loc[upstr_mut_dist_dat_exp.strand=='-', 
+                           'mut_reg_start']=upstr_mut_dist_dat_exp['start']+(
+    upstr_mut_dist_dat_exp['dist_tss']*-1)-2_000
+upstr_mut_dist_dat_exp.loc[upstr_mut_dist_dat_exp.strand=='-',
+                           'mut_reg_end']=upstr_mut_dist_dat_exp['start']+(
+    upstr_mut_dist_dat_exp['dist_tss']*-1)
+dwnstr_mut_dist_dat_exp.loc[dwnstr_mut_dist_dat_exp.strand=='-', 
+                           'mut_reg_start']=dwnstr_mut_dist_dat_exp['start']+(
+    dwnstr_mut_dist_dat_exp['dist_tss']*-1)-2_000
+dwnstr_mut_dist_dat_exp.loc[dwnstr_mut_dist_dat_exp.strand=='-',
+                           'mut_reg_end']=dwnstr_mut_dist_dat_exp['start']+(
+    dwnstr_mut_dist_dat_exp['dist_tss']*-1)
+
+#
 upstr_mut_dist_dat_exp = upstr_mut_dist_dat_exp[upstr_mut_dist_dat_exp['mut_reg_chrom'].isin(
     ['chr'+str(s) for s in list(range(1,23))])]
 upstr_mut_dist_dat_exp_gtex = upstr_mut_dist_dat_exp[upstr_mut_dist_dat_exp['cell'].isin(set(gtex_map.cell_id))]
@@ -188,18 +226,28 @@ upstr_mut_dist_dat_exp_gtex = pd.merge(upstr_mut_dist_dat_exp,gtex_map,left_on='
 #get deciles for each tissue
 upstr_mut_dist_dat_exp_gtex['quantiles'] = upstr_mut_dist_dat_exp_gtex.groupby(['gtex_tissue'])['pred_expression_delta'].transform(
     lambda x: pd.qcut(x, 10, labels=range(1,11)))
+dwnstr_mut_dist_dat_exp = dwnstr_mut_dist_dat_exp[dwnstr_mut_dist_dat_exp['mut_reg_chrom'].isin(
+    ['chr'+str(s) for s in list(range(1,23))])]
+dwnstr_mut_dist_dat_exp_gtex = dwnstr_mut_dist_dat_exp[dwnstr_mut_dist_dat_exp['cell'].isin(set(gtex_map.cell_id))]
+#join on tissue from gtex
+dwnstr_mut_dist_dat_exp_gtex = pd.merge(dwnstr_mut_dist_dat_exp,gtex_map,left_on='cell',right_on='cell_id')
+#get deciles for each tissue
+dwnstr_mut_dist_dat_exp_gtex['quantiles'] = dwnstr_mut_dist_dat_exp_gtex.groupby(['gtex_tissue'])['pred_expression_delta'].transform(
+    lambda x: pd.qcut(x, 10, labels=range(1,11)))
+#
+#join up and dwn and tss
+upstr_mut_dist_dat_exp_gtex = pd.concat([upstr_mut_dist_dat_exp_gtex,
+                                         dwnstr_mut_dist_dat_exp_gtex,])
 #----------------------------------------
-#also use this set to get neg controls - i.e. all possible regions upstream in 2k bins
-#filt the hi-c
+#also use this set to get neg controls - i.e. all possible regions upstream/downstream in 2k bins
+#filt the hi-c to match genes and cells from qtl
 hic_relationships['cell_gene']=hic_relationships['eid']+hic_relationships['gene_id']
 upstr_mut_dist_dat_exp_gtex['cell_gene']=upstr_mut_dist_dat_exp_gtex['cell']+upstr_mut_dist_dat_exp_gtex['gene']
-hic_relationships = hic_relationships[hic_relationships['cell_gene'].isin(upstr_mut_dist_dat_exp_gtex['cell_gene'])]
 #rename cols to make it align 
 hic_relationships.rename(columns={'eid':'cell'}, inplace=True)
 hic_relationships.rename(columns={'gene_id':'gene'}, inplace=True)
-#8616 Hi-C 2k bin interactions remaining for all testing cell types
+#11667 Hi-C 2k bin interactions remaining for all testing cell types
 #now check for enrichment of the eQTL sets in these and compare to the model's top decile
-
 
 #loop through each cell and compare to all peaks with bootstrapping
 num_tests = 10_000
@@ -263,14 +311,18 @@ for cell_i in cell_tested:
 tiss_tested_n = ['Cerebellum & Hippocampus' if x=='Brain_Cerebellum, Brain_Hippocampus' else x for x in tiss_tested]
 tiss_tested_n = ['Lymphocytes' if x=='Cells_EBV-transformed_lymphocytes' else x for x in tiss_tested_n]
 
-from rpy2.robjects.packages import importr
-from rpy2.robjects.vectors import FloatVector
-
-stats = importr('stats')
+def p_adjust_bh(p):
+    """Benjamini-Hochberg p-value correction for multiple hypothesis testing."""
+    p = np.asfarray(p)
+    by_descend = p.argsort()[::-1]
+    by_orig = by_descend.argsort()
+    steps = float(len(p)) / np.arange(len(p), 0, -1)
+    q = np.minimum(1, np.minimum.accumulate(steps * p[by_descend]))
+    return q[by_orig]
 
 quant_i = 1
 
-p_adjust = list(stats.p_adjust(FloatVector(p_vals), method = 'BH'))    
+p_adjust = list(p_adjust_bh(p_vals))   
 
 bst_hic_res = pd.DataFrame({"quantile":[quant_i] * len(p_vals),
                             "cell":list(cell_tested),

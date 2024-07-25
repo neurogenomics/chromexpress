@@ -106,6 +106,11 @@ marks and genes not just those in the test set.
 
 ### 5. _In silico_ Mutagenisis analysis
 
-See `./bin/In_silico_mut_chromoformer.py` for the script to analyse the effect on gene expression of degrading activating/repressing histone mark signals at differing distances from the transcriptional start site.
+See `./bin/In_silico_perturb_chromoformer.py` and `in_silico_perturb_bootstrap_qtl_enrichment.py` for the scripts to analyse the effect on gene expression of degrading activating/repressing histone mark signals at differing distances from the transcriptional start site and looking for enrichment in QTL sets. Analysis of benchmark approaches can be found for max histone mark activity ( `in_silico_perturb_bootstrap_max_hist_activity_enrichment.py`), proximity (`in_silico_perturb_bootstrap_min_dist_enrichment.py`) and Hi-C (`in_silico_perturb_bootstrap_HiC_enrichment.py`).
+
+
+
+
+
 
 

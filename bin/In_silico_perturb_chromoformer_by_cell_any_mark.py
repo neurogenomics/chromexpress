@@ -43,6 +43,23 @@ from chromoformer.chromoformer.data import Roadmap3D
 from chromoformer.chromoformer.net import Chromoformer
 from chromoformer.chromoformer.util import seed_everything
 import argparse
+
+def copy_item(item,gpu=True):
+    """
+    Simple function to copy all tensors in a dictionary
+    """
+    copy_item = {}
+    for k, v in item.items():
+        #note gene ids aren't tensors
+        if k=='gene':
+            copy_item[k] = v
+        else:
+            if gpu:
+                copy_item[k] = v.detach().clone().cuda()
+            else:
+                copy_item[k] = v.detach().clone() 
+    return copy_item    
+
 #pass inputs
 # argv
 def get_args():
@@ -99,8 +116,9 @@ train_meta = train_dir / 'train.csv'
 
 #we want to run h3k27ac at prom and distal for expressed genes
 #and run h3k27me3 at prom and distal for non-expressed genes
-runs = [['h3k27me3','non-expressed','promoter'],['h3k27me3','non-expressed','distal'], 
-        ['h3k27ac','expressed','promoter'],['h3k27ac','expressed','distal']]
+runs = [#['h3k27me3','non-expressed','promoter'],['h3k27me3','non-expressed','distal'], 
+        #['h3k27ac','expressed','promoter'],['h3k27ac','expressed','distal']]
+        ['h3k4me3','expressed','promoter'],['h3k4me3','expressed','distal']]
 
 #We want to decrease histone mark activity across different proportions
 props = np.round(np.arange(0, 1.1, .1),2)[::-1] 
@@ -209,14 +227,16 @@ with torch.no_grad():
                             #x_p_{bin_size} also contains the distal regions, need to mutate all resolutions
                             #these contain 40k bp so mutate all but centre 6k (same receptive field as prom model)
                             #start of gene is centred: start_p, end_p = start_p - 20000, start_p + 20000
-                            recep_field = 6_000
+                            #mutate in 2k bins
+                            #will have 40k/2k posiitons minus the promoter part
+                            recep_field_prom = 6_000
                             #Mutate chunks of distal histone mark activity in highest res (2k) bins
                             #note this will increase batch size
                             #position important for getting mutation location from gene with distal
                             mut_pos = []
-                            item_org = item.copy()
+                            item_org = copy_item(item)
                             for pos_i in range(0,40_000//2_000):
-                                item_pos_i = item_org.copy()
+                                item_pos_i = copy_item(item_org)
                                 #if centre 6k, skip
                                 if pos_i not in [8,9,10]:
                                     mut_pos.append(pos_i)
@@ -236,13 +256,18 @@ with torch.no_grad():
                                                                    0:1] = item_pos_i[f'x_p_{res_i}'][0:1,0:1,
                                                                                                      pos_i_res_i_strt:pos_i_res_i_end,
                                                                                                      0:1]*prop_i
-                                        if pos_i >0:
+                                        #first time - copy whole tensor
+                                        if pos_i ==0 and res_i == 100:
+                                            item = item_pos_i
+                                        #still first pos, so need to copy values not concat
+                                        elif pos_i ==0:
+                                            item[f'x_p_{res_i}'] = item_pos_i[f'x_p_{res_i}']
+                                        #concat from second pos on
+                                        else:
                                             item[f'x_p_{res_i}'] = torch.cat((item[f'x_p_{res_i}'],item_pos_i[f'x_p_{res_i}']),0)
-                                            if pos_i ==0:
-                                                item = item_pos_i
                             #multiple by number of separate mutations
-                            item['gene'] = item['gene']*((40_000//2_000)-(recep_field//2_000))
-                            item['label'] = item['label'].repeat(((40_000//2_000)-(recep_field//2_000)),1)
+                            item['gene'] = item['gene']*((40_000//2_000)-(recep_field_prom//2_000))
+                            item['label'] = item['label'].repeat(((40_000//2_000)-(recep_field_prom//2_000)),1)
                             #do the same for the model inputs
                             for item_i in ['pad_mask_p_2000','x_pcre_2000','pad_mask_pcre_2000','interaction_mask_2000',
                                            'pad_mask_p_500','x_pcre_500','pad_mask_pcre_500',
@@ -250,11 +275,11 @@ with torch.no_grad():
                                            'interaction_freq']:
                                 #diff ones have diff dims
                                 if ('x_pcre' in item_i) or ('interaction_mask' in item_i):
-                                    item[item_i] = item[item_i].repeat(((40_000//2_000)-(recep_field//2_000)),1,1,1)
+                                    item[item_i] = item[item_i].repeat(((40_000//2_000)-(recep_field_prom//2_000)),1,1,1)
                                 elif item_i =='interaction_freq':
-                                    item[item_i] = item[item_i].repeat(((40_000//2_000)-(recep_field//2_000)),1,1)
+                                    item[item_i] = item[item_i].repeat(((40_000//2_000)-(recep_field_prom//2_000)),1,1)
                                 else:
-                                    item[item_i] = item[item_i].repeat(((40_000//2_000)-(recep_field//2_000)),1,1,1,1)  
+                                    item[item_i] = item[item_i].repeat(((40_000//2_000)-(recep_field_prom//2_000)),1,1,1,1)  
 
                         #predict
                         out = model(item['x_p_2000'], item['pad_mask_p_2000'], item['x_pcre_2000'], 
@@ -285,9 +310,9 @@ with torch.no_grad():
             #concat to single dataframe
             losses = pd.concat(losses)
             #save res
-            losses.to_csv(f"{PRED_PATH}/{cell_i}_{str(ind_test)}_fold{str(ind)}_chromoformer_in_silico_mut.csv",
+            losses.to_csv(f"{PRED_PATH}/{cell_i}_{str(ind_test)}_fold{str(ind)}_{assay_i}_chromoformer_in_silico_mut.csv",
                           sep='\t',index=False)
-            print(f"Saved {cell_i}_fold{str(ind)}_{str(ind_test)}")
+            print(f"Saved {cell_i}_fold{str(ind)}_{str(ind_test)}_{assay_i}")
             #update - not just doing it at the end of the runs because of the big mem usage of storing all
             losses = []
         ind_test+=1
